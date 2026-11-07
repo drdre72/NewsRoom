@@ -49,3 +49,15 @@ playout:
     list_size: 12
   standby_seconds: 20          # slate duration when the rundown has nothing
   port: 8788                   # preview HTTP port
+
+# Output muxers. HLS local preview is always on; RTMP is the YouTube path —
+# gated by `enabled` AND the env var holding the full push URL with stream
+# key (NEWSROOM_RTMP_URL=rtmp://a.rtmp.youtube.com/live2/<key>). The URL is
+# a secret: env-only, never in config/git (§77). publishing.automatic stays
+# false until factual safety is proven (§66).
+outputs:
+  hls:
+    enabled: true
+  rtmp:
+    enabled: false
+    url_env: NEWSROOM_RTMP_URL

@@ -22,7 +22,7 @@ def test_impact_levels(conn, settings):
     score, level = score_impact("earthquake", normal, settings)
     assert score < 0.35
 
-    unknown = score_impact("volcano", {"anything": 1}, settings)
+    unknown = score_impact("unconfigured_type", {"anything": 1}, settings)
     assert unknown == (0.0, "BACKGROUND")
 
 

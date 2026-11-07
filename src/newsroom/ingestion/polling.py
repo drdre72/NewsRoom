@@ -31,6 +31,18 @@ def poll_once(conn: sqlite3.Connection, settings: Settings, ingest) -> dict:
     ua = settings.get("polling.user_agent", "newsroom/0.1")
     report: dict = {"sources": {}, "new_items": 0, "revisions": 0, "errors": []}
     for name, cfg in enabled_sources(settings):
+        interval = cfg.get("poll_every_seconds")
+        if interval:
+            # Per-source cadence: skip when our newest stored observation is
+            # fresher than the interval (stale data still polls — that's the
+            # point of tracking it).
+            from ..intelligence.freshness import latest_observation_age
+            age = latest_observation_age(conn, name)
+            if age is not None and age < float(interval):
+                report["sources"][name] = {
+                    "ok": True, "skipped": "interval",
+                    "age_seconds": round(age, 1)}
+                continue
         try:
             adapter = adapter_for(cfg["kind"], name, cfg)
             result = adapter.fetch(timeout=timeout, user_agent=ua)

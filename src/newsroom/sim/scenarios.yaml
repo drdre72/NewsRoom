@@ -34,8 +34,14 @@ nws_alert_revision:
     - {adapter: nws, file: nws_warning.json, at_offset_s: 0}
     - {adapter: nws, file: nws_warning_rev2.json, at_offset_s: 900}
 
+wildfire_event:
+  description: EONET wildfire — third event family; acreage growth revision.
+  render: true
+  items:
+    - {adapter: eonet, file: eonet_wildfire.json, at_offset_s: 0}
+    - {adapter: eonet, file: eonet_wildfire_rev2.json, at_offset_s: 21600}
+
 # Fixtures for adapter families landing in later phases (§53).
 hurricane_advisory:     {description: "fixture only", render: false, items: []}
-wildfire_event:         {description: "fixture only", render: false, items: []}
 security_bulletin:      {description: "fixture only — high-risk fields omitted", render: false, items: []}
 source_outage:          {description: "simulated fetch failure; keeps last verified state", render: false, items: []}

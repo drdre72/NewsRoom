@@ -165,7 +165,9 @@ def _script_from_template(
     """Deterministic fact-cited bulletin — always valid, always honest."""
     if ctx.event_type == "weather_alert":
         return _weather_template(ctx, settings)
-    return _earthquake_template(ctx, settings)
+    if ctx.event_type == "earthquake":
+        return _earthquake_template(ctx, settings)
+    return _eonet_template(ctx, settings)
 
 
 def _weather_template(ctx: FactContext, settings: Settings) -> Script:
@@ -216,6 +218,51 @@ def _weather_template(ctx: FactContext, settings: Settings) -> Script:
     headline = (
         f"{alert.value_display} — {area.value_display}" if alert and area else
         (f"{alert.value_display} issued" if alert else "Weather alert bulletin")
+    )
+    return Script(headline=headline, segments=segs, generator="template",
+                  event_id=ctx.event_id, revision=ctx.revision)
+
+
+def _eonet_template(ctx: FactContext, settings: Settings) -> Script:
+    """EONET natural events (wildfire, volcano, flood, ...) — severity carries
+    a unit (acres, kts, VEI) via `magnitude_unit`, never 'magnitude'."""
+    f, segs, add = _template_parts(ctx, settings)
+
+    cat = f.get("category_title") or f.get("category")
+    title_f = f.get("title")
+    place = f.get("location_label")
+    kind = cat.value_display if cat else "event"
+    if title_f:
+        add(f"{title_f.value_display}.", "title")
+    elif cat and place:
+        add(f"A {kind.lower()} event is being tracked in "
+            f"{place.value_display}.", cat.field, "location_label")
+
+    sev = f.get("severity")
+    unit = f.get("magnitude_unit")
+    if sev:
+        suffix = f" {unit.value_display}" if unit else ""
+        add(f"The latest measured extent is {sev.value_display}{suffix}.",
+            "severity", *(["magnitude_unit"] if unit else []))
+
+    when = f.get("occurred_at")
+    if when:
+        add(f"The latest position was reported at {when.value_display}.",
+            "occurred_at")
+
+    closed = f.get("closed")
+    if closed and closed.value:
+        ended = f.get("closed_at")
+        add(f"The source has marked this event closed"
+            + (f" as of {ended.value_display}." if ended else "."),
+            "closed", *(["closed_at"] if ended else []))
+
+    _revision_segments(ctx, add)
+    _developing_close(add)
+
+    headline = (
+        f"{kind} — {place.value_display}" if cat and place else
+        (title_f.value_display if title_f else f"{kind} bulletin")
     )
     return Script(headline=headline, segments=segs, generator="template",
                   event_id=ctx.event_id, revision=ctx.revision)

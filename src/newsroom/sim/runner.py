@@ -17,6 +17,7 @@ import yaml
 from ..config import Settings
 from ..ingestion.adapters.usgs import UsgsAdapter
 from ..ingestion.adapters.nws import NwsAdapter
+from ..ingestion.adapters.eonet import EonetAdapter
 from ..logging import get_logger, log_event
 from ..pipeline import ingest_observation
 from ..storage import repositories as repo
@@ -26,7 +27,7 @@ log = get_logger("sim")
 FIXTURES = Path(__file__).parent / "fixtures"
 SCENARIOS = Path(__file__).parent / "scenarios.yaml"
 
-_ADAPTERS = {"usgs": UsgsAdapter, "nws": NwsAdapter}
+_ADAPTERS = {"usgs": UsgsAdapter, "nws": NwsAdapter, "eonet": EonetAdapter}
 
 
 def list_scenarios() -> dict:

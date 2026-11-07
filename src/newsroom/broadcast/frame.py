@@ -1,0 +1,130 @@
+"""Broadcast frame — the 16:9 channel chrome around a vertical Short.
+
+The Short is data; the frame is the channel. Rendered per program so the
+gutters carry the story's title, impact chip, and provenance. The playout
+overlays the scaled video at the frame's center window (607×1080 at x=656).
+"""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from pathlib import Path
+
+from ..visuals.renderer import (
+    PALETTE, _FONT_CANDIDATES, _LEVEL_COLORS, _MONO_CANDIDATES, _font,
+)
+
+WINDOW_W = 608         # content window between header and ticker
+WINDOW_H = 888         # y = 96..984
+WINDOW_Y = 96
+WINDOW_X = (1920 - WINDOW_W) // 2   # 656
+# Back-compat aliases for the playout scaler.
+VIDEO_W, VIDEO_X = WINDOW_W, WINDOW_X
+
+
+def _wrap(draw, text: str, font, max_w: int) -> list[str]:
+    words, lines, cur = text.split(), [], ""
+    for w in words:
+        trial = f"{cur} {w}".strip()
+        if draw.textbbox((0, 0), trial, font=font)[2] <= max_w:
+            cur = trial
+        else:
+            if cur:
+                lines.append(cur)
+            cur = w
+    if cur:
+        lines.append(cur)
+    return lines
+
+
+def render_frame(out: Path, width: int, height: int, *,
+                 title: str, level: str = "NORMAL",
+                 source_line: str = "", ticker: str = "",
+                 detail_lines: list[str] | None = None) -> Path:
+    from PIL import Image, ImageDraw
+    img = Image.new("RGB", (width, height), PALETTE["bg"])
+    draw = ImageDraw.Draw(img)
+
+    # -- header --------------------------------------------------------
+    draw.rectangle([0, 0, width, 88], fill=PALETTE["bg2"])
+    chip = _font(_FONT_CANDIDATES, 40)
+    live_w = draw.textbbox((0, 0), "LIVE", font=chip)[2]
+    draw.rounded_rectangle([40, 20, 40 + live_w + 40, 68], radius=10,
+                           fill=PALETTE["red"])
+    draw.text((60, 28), "LIVE", font=chip, fill=(255, 255, 255))
+    draw.text((width - 40, 30), "NEWSROOM", font=_font(_MONO_CANDIDATES, 36),
+              fill=PALETTE["muted"], anchor="ra")
+    story_font = _font(_FONT_CANDIDATES, 34)
+    # header center is visible — the video window starts at y=96
+    draw.text((width // 2, 44), title[:60], font=story_font,
+              fill=PALETTE["text"], anchor="mm")
+    draw.line([0, 88, width, 88], fill=PALETTE["border"], width=2)
+
+    # -- left gutter ----------------------------------------------------
+    f_mono = _font(_MONO_CANDIDATES, 30)
+    f_mid = _font(_FONT_CANDIDATES, 38)
+    lx, ly = 56, 200
+    draw.text((lx, ly), "NEWSROOM", font=f_mono, fill=PALETTE["muted"])
+    draw.text((lx, ly + 44), "LIVE", font=_font(_FONT_CANDIDATES, 96),
+              fill=PALETTE["red"])
+    draw.text((lx, ly + 160), "AUTONOMOUS", font=f_mid, fill=PALETTE["text"])
+    draw.text((lx, ly + 210), "CRISIS DESK", font=f_mid, fill=PALETTE["text"])
+    ly += 330
+    draw.line([lx, ly, lx + 520, ly], fill=PALETTE["border"], width=2)
+    ly += 40
+    draw.text((lx, ly), "AUTHORITATIVE FEEDS", font=f_mono,
+              fill=PALETTE["muted"])
+    for i, src in enumerate(("USGS", "NWS", "EONET")):
+        y = ly + 50 + i * 54
+        draw.ellipse([lx, y + 8, lx + 20, y + 28], fill=PALETTE["green"])
+        draw.text((lx + 34, y), src, font=f_mid, fill=PALETTE["text"])
+
+    # -- right gutter ---------------------------------------------------
+    rx = WINDOW_X + WINDOW_W + 56
+    rw = width - rx - 48
+    ry = 200
+    lvl_color = _LEVEL_COLORS.get(level, PALETTE["accent"])
+    lw = draw.textbbox((0, 0), level, font=chip)[2]
+    draw.rounded_rectangle([rx, ry, rx + lw + 40, ry + 52], radius=10,
+                           fill=lvl_color)
+    draw.text((rx + 20, ry + 8), level, font=chip, fill=(255, 255, 255))
+    ry += 96
+    for line in _wrap(draw, title, f_mid, rw)[:4]:
+        draw.text((rx, ry), line, font=f_mid, fill=PALETTE["text"])
+        ry += 48
+    ry += 24
+    for line in detail_lines or []:
+        draw.text((rx, ry), line, font=f_mono, fill=PALETTE["muted"])
+        ry += 42
+    if source_line:
+        for line in _wrap(draw, source_line, f_mono, rw)[:2]:
+            draw.text((rx, ry), line, font=f_mono, fill=PALETTE["muted"])
+            ry += 42
+    # window outline — the Short composites inside this panel
+    draw.rectangle([WINDOW_X - 4, WINDOW_Y - 4,
+                    WINDOW_X + WINDOW_W + 4, WINDOW_Y + WINDOW_H + 4],
+                   outline=PALETTE["border"], width=2)
+    ty_font = _font(_MONO_CANDIDATES, 24)
+    for j, line in enumerate(
+            _wrap(draw, "facts verified against the fact ledger",
+                  ty_font, rw)[:2]):
+        draw.text((rx, height - 180 + j * 34), line,
+                  font=ty_font, fill=PALETTE["muted"])
+
+    # -- ticker bar -----------------------------------------------------
+    ty = height - 88
+    draw.rectangle([0, ty, width, height], fill=PALETTE["bg2"])
+    draw.line([0, ty, width, ty], fill=PALETTE["border"], width=2)
+    now = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
+    clock_w = draw.textbbox((0, 0), now, font=f_mono)[2]
+    max_ticker = width - 40 - clock_w - 100
+    tick = ticker or "monitoring authoritative sources"
+    while (tick and draw.textbbox((0, 0), tick, font=f_mono)[2]
+           > max_ticker):
+        tick = tick[:-2]
+    draw.text((40, ty + 24), tick, font=f_mono, fill=PALETTE["muted"])
+    draw.text((width - 40, ty + 24), now, font=f_mono,
+              fill=PALETTE["muted"], anchor="ra")
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    img.save(out, "PNG")
+    return out

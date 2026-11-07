@@ -43,7 +43,8 @@ def display_value(field: str, value: Any) -> str:
         return _iso_to_display(value)
     if field in ("severity", "magnitude"):
         try:
-            return f"{float(value):.1f}"
+            v = float(value)
+            return f"{v:,.0f}" if abs(v) >= 1000 else f"{v:.1f}"
         except (TypeError, ValueError):
             return str(value)
     if field in ("latitude", "longitude"):

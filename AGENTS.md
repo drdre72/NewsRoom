@@ -48,13 +48,18 @@ renderer are the always-on fallbacks.
 - `Settings.get()` paths are dotted against the *merged* top level —
   `broadcast.yaml`'s `playout:` is `playout.*`, NOT `broadcast.playout.*`.
   A wrong path silently returns the default; verify against the yaml.
+- On-air voice is locked to Kokoro `af_heart` (`tts.backend_order:
+  [kokoro_mlx]`, `tts.strict_voice: true`) — no `say` fallback on air;
+  a render fails rather than ship an unapproved voice.
+- `python main.py` re-execs into `.venv` automatically when present —
+  deps (mlx_audio, PIL) always resolve from the project env.
 
 ## Layout map
 
 ```
 config/            all tunables (yaml) — sources, thresholds, models
 src/newsroom/
-  ingestion/       adapters (usgs, nws), normalizer, fusion, revisions, polling
+  ingestion/       adapters (usgs, nws, eonet), normalizer, fusion, revisions, polling
   intelligence/    fact_ledger, impact_engine, confidence_engine, freshness
   story/           planner, script_generator, claim_validator, memory
   llm/             ollama client + JSON schemas
@@ -63,7 +68,8 @@ src/newsroom/
   editor/          captions (SRT/ASS), timeline, ffmpeg, composer
   quality/         publication gate checks
   sim/             fixtures + scenario runner
-  broadcast/       director, program scheduler, HLS playout, slate, preview
+  broadcast/       director, program scheduler, frame (16:9 chrome),
+                   HLS playout (+ gated RTMP out), slate, preview
   macos/           launchd plist templates + install/uninstall
   service.py       core daemon loop (poll + job drain, signal-aware)
 tests/             pytest, offline-safe

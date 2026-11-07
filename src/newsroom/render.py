@@ -142,6 +142,12 @@ def render_short(
                               engine=candidate.name, error=str(exc),
                               segment=i)
             if res is None:
+                if settings.get("tts.strict_voice"):
+                    # Voice lock: never ship mixed/silent narration — fail
+                    # the render so the job surfaces as failed (§37).
+                    raise RuntimeError(
+                        f"tts failed for segment {i} and strict_voice "
+                        "forbids fallback; render aborted")
                 break
             seg_wavs.append(res.path)
             seg.duration_s = res.duration_s
@@ -245,10 +251,11 @@ def render_short(
 
 
 def _tts_chain(engine, settings) -> list:
-    """Preferred engine, then `say` as the always-present safety net (§37)."""
+    """Preferred engine, then `say` — unless strict_voice locks narration
+    to the approved voice (a failed render beats the wrong voice on air)."""
     from .audio.tts import SayEngine
     chain = [engine]
-    if engine.name != "say":
+    if engine.name != "say" and not settings.get("tts.strict_voice"):
         chain.append(SayEngine(settings))
     return chain
 

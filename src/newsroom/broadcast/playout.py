@@ -99,35 +99,74 @@ class HlsPlayout:
             str(prog_pl),
         ]
 
-    def _encode_args(self, input_args: list[str]) -> list[str]:
+    def _rtmp_out_args(self) -> list[str]:
+        """Optional second muxer: the same encode tees to RTMP (§34).
+        Enabled by config + env only — the URL holds the stream key, so it
+        lives in the environment, never in config/git (§77)."""
+        import os
+        rtmp = self.settings.get("outputs.rtmp", {}) or {}
+        if not rtmp.get("enabled"):
+            return []
+        if not self.settings.get("publishing.automatic", False):
+            # §66: external transmission requires the publication gate to be
+            # explicitly unlocked, independent of the rtmp toggle.
+            log_event(log, 30, "rtmp configured but publishing.automatic "
+                      "is false; not transmitting")
+            return []
+        url = os.environ.get(rtmp.get("url_env", "NEWSROOM_RTMP_URL"), "")
+        if not url:
+            log_event(log, 30, "rtmp output enabled but env var unset",
+                      env=rtmp.get("url_env"))
+            return []
+        return ["-f", "flv", url]
+
+    def _encode_args(self) -> list[str]:
         p = self.settings.get("playout", {}) or {}
-        w = int(p.get("width", 1920)); h = int(p.get("height", 1080))
-        fps = int(p.get("fps", 30))
-        vf = (f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
-              f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=0x0b1220,"
-              f"fps={fps},format=yuv420p")
         return [
-            *input_args,
-            "-vf", vf,
             "-c:v", p.get("encoder", "h264_videotoolbox"),
             "-b:v", p.get("video_bitrate", "6000k"),
             "-c:a", p.get("audio", "aac"), "-ar", "48000",
             "-b:a", p.get("audio_bitrate", "160k"), "-ac", "2",
         ]
 
-    def air_video(self, src: Path) -> int:
-        return self._start_program(["-re", "-i", str(src)])
+    def _geom(self) -> tuple[int, int, int]:
+        p = self.settings.get("playout", {}) or {}
+        return (int(p.get("width", 1920)), int(p.get("height", 1080)),
+                int(p.get("fps", 30)))
+
+    def air_video(self, src: Path, frame: Path | None = None) -> int:
+        w, h, fps = self._geom()
+        if frame:
+            # Channel chrome: still frame + content fitted into the window
+            # between header and ticker, centered — any aspect is safe.
+            from .frame import WINDOW_H, WINDOW_W
+            inputs = ["-re", "-loop", "1", "-i", str(frame),
+                      "-re", "-i", str(src)]
+            fc = (f"[1:v]scale={WINDOW_W}:{WINDOW_H}:"
+                  "force_original_aspect_ratio=decrease,"
+                  f"fps={fps},format=yuv420p[vid];"
+                  f"[0:v][vid]overlay=(W-w)/2:(H-h)/2:shortest=1[v]")
+            return self._start_program(
+                inputs, ["-filter_complex", fc, "-map", "[v]", "-map", "1:a?"])
+        vf = (f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
+              f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=0x0b1220,"
+              f"fps={fps},format=yuv420p")
+        return self._start_program(["-re", "-i", str(src)], ["-vf", vf])
 
     def air_slate(self, slate_png: Path, seconds: float) -> int:
+        w, h, fps = self._geom()
+        vf = f"scale={w}:{h},fps={fps},format=yuv420p"
         return self._start_program([
             "-re", "-loop", "1", "-t", str(seconds), "-i", str(slate_png),
             "-re", "-f", "lavfi", "-t", str(seconds),
             "-i", "anullsrc=r=48000:cl=stereo", "-shortest",
-        ])
+        ], ["-vf", vf])
 
-    def _start_program(self, input_args: list[str]) -> int:
+    def _start_program(self, input_args: list[str],
+                       vmap: list[str] | None = None) -> int:
         prog_pl = self.dir / f"prog_{self.next_segment:05d}.m3u8"
-        args = self._encode_args(input_args) + self._hls_out_args(prog_pl)
+        args = [*input_args, *(vmap or []), *self._encode_args(),
+                *self._hls_out_args(prog_pl), *self._rtmp_out_args()]
         cmd = [ffmpeg.ffmpeg_path(), "-y", "-hide_banner",
                "-loglevel", "error", *args]
         self._proc = subprocess.Popen(

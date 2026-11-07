@@ -32,6 +32,19 @@ _METRICS_BY_TYPE = {
 _METRICS_GENERIC = (("title", "EVENT"), ("occurred_at", "TIME UTC"),
                     ("status", "STATUS"))
 
+# EONET families share one metric grid — extent + unit, class, time, status.
+_EONET_TYPES = {"wildfire", "volcano", "severe_storm", "flood", "landslide",
+                "snow", "drought", "sea_ice", "temp_extreme"}
+_METRICS_EONET = (("severity", "EXTENT"), ("magnitude_unit", "UNIT"),
+                  ("category_title", "CLASS"), ("occurred_at", "TIME UTC"),
+                  ("status", "STATUS"))
+
+
+def _metrics_for(event_type: str):
+    if event_type in _EONET_TYPES:
+        return _METRICS_EONET
+    return _METRICS_BY_TYPE.get(event_type, _METRICS_GENERIC)
+
 
 def plan_visuals(
     conn: sqlite3.Connection,
@@ -64,7 +77,7 @@ def plan_visuals(
                           }))
 
     metrics = []
-    for field, label in _METRICS_BY_TYPE.get(event.event_type, _METRICS_GENERIC):
+    for field, label in _metrics_for(event.event_type):
         if field in f:
             metrics.append({"label": label, "value": f[field].value_display})
     if metrics:

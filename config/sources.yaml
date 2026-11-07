@@ -22,9 +22,11 @@ sources:
   eonet:
     kind: nasa_eonet
     authority: 0.9
-    enabled: false
+    enabled: true
     feeds:
       events: https://eonet.gsfc.nasa.gov/api/v3/events
+    poll_feed: events
+    poll_every_seconds: 3600   # EONET curates daily-ish; hourly cadence
 
   gdacs:
     kind: gdacs

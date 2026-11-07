@@ -57,6 +57,19 @@ def _weather_alert_score(snapshot: dict[str, Any], cfg: dict) -> float:
     return min(1.0, total)
 
 
+def _generic_score(snapshot: dict[str, Any], cfg: dict) -> float:
+    """Severity + category scorer for EONET-style families (§13). Configured
+    in thresholds.yaml per event_type; closed events lose their penalty."""
+    sev = cfg.get("severity", {})
+    total = sev.get("weight", 0) * _norm(
+        snapshot.get("severity"), sev.get("min", 0), sev.get("max", 1))
+    total += _mapped(snapshot, "category", cfg.get("category", {}),
+                     default=0.3)
+    if snapshot.get("closed"):
+        total -= float(cfg.get("closed_penalty", 0.3))
+    return min(1.0, max(0.0, total))
+
+
 def score_impact(
     event_type: str, snapshot: dict[str, Any], settings: Settings
 ) -> tuple[float, str]:
@@ -67,6 +80,8 @@ def score_impact(
         score = _earthquake_score(snapshot, type_cfg)
     elif event_type == "weather_alert":
         score = _weather_alert_score(snapshot, type_cfg)
+    elif type_cfg:
+        score = _generic_score(snapshot, type_cfg)
     else:
         score = 0.0
 

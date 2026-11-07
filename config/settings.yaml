@@ -39,11 +39,14 @@ llm:
   temperature: 0.2
 
 tts:
-  # Preference order. First available backend wins. "say" is a macOS-native
-  # development fallback; kokoro_mlx is the production target (§23).
-  backend_order: [kokoro_mlx, say]
-  voice: "af_heart"        # kokoro voice
-  say_voice: "Samantha"    # macOS fallback voice
+  # Preference order. First available backend wins. Locked to kokoro_mlx:
+  # `say` stays in the codebase for dev environments, but nothing airs in a
+  # voice that hasn't passed a listen test.
+  backend_order: [kokoro_mlx]
+  kokoro_voice: "af_heart"   # the approved on-air voice (models.yaml sets same)
+  say_voice: "Samantha"      # macOS dev voice — not used while order is kokoro-only
+  strict_voice: true   # no mid-render voice fallback; a failed render is
+                       # better than airing the wrong voice
   sample_rate: 24000
 
 alignment:

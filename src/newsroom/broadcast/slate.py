@@ -40,7 +40,7 @@ def render_slate(out: Path, width: int, height: int,
               font=font_sub, fill=PALETTE["muted"], anchor="mm")
 
     # pulsing-style status dots (static but alive-looking)
-    for i, label in enumerate(("USGS", "NWS")):
+    for i, label in enumerate(("USGS", "NWS", "EONET")):
         x = width // 2 - 160 + i * 320
         draw.ellipse([x - 12, cy + 190, x + 12, cy + 214],
                      fill=PALETTE["green"])

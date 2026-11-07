@@ -13,11 +13,15 @@ from dataclasses import dataclass
 from ..config import Settings
 from ..storage import repositories as repo
 
-# Rundown segment id -> event_type. Segments without a mapping have no
-# content source yet and are skipped (headlines has no type = any event).
+# Rundown segment id -> event_types covered. Segments without a mapping
+# have no content source yet and are skipped (headlines has no list =
+# any event type qualifies).
 SEGMENT_TYPES = {
-    "earthquakes": "earthquake",
-    "world_weather": "weather_alert",
+    "earthquakes": ["earthquake"],
+    "world_weather": ["weather_alert"],
+    "international": ["wildfire", "volcano", "severe_storm", "flood",
+                      "landslide", "snow", "drought", "sea_ice",
+                      "temp_extreme"],
 }
 
 
@@ -33,25 +37,32 @@ class Program:
 
 
 def _eligible_events(conn: sqlite3.Connection, settings: Settings,
-                     event_type: str | None, max_air_s: int) -> list:
+                     event_types: list[str] | None, max_air_s: int) -> list:
     """Events with a rendered video asset at current revision, meeting
     confidence, not aired anywhere within the cadence window."""
     min_conf = float(settings.get("auto_render.min_confidence", 0.70))
+    types = event_types or [None]
     out = []
-    for ev in repo.list_events(conn, event_type=event_type, limit=50):
-        if ev.confidence_score < min_conf:
-            continue
-        if not repo.latest_video_asset(conn, ev.event_id, ev.current_revision):
-            continue
-        # per-event air cadence: don't repeat a story inside the window
-        last = conn.execute(
-            "SELECT MAX(started_at) FROM air_log WHERE event_id=?"
-            " AND started_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now', ?)",
-            (ev.event_id, f"-{max_air_s} seconds"),
-        ).fetchone()[0]
-        if last:
-            continue
-        out.append(ev)
+    seen = set()
+    for et in types:
+        for ev in repo.list_events(conn, event_type=et, limit=50):
+            if ev.event_id in seen:
+                continue
+            seen.add(ev.event_id)
+            if ev.confidence_score < min_conf:
+                continue
+            if not repo.latest_video_asset(
+                    conn, ev.event_id, ev.current_revision):
+                continue
+            # per-event air cadence: don't repeat a story inside the window
+            last = conn.execute(
+                "SELECT MAX(started_at) FROM air_log WHERE event_id=?"
+                " AND started_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now', ?)",
+                (ev.event_id, f"-{max_air_s} seconds"),
+            ).fetchone()[0]
+            if last:
+                continue
+            out.append(ev)
     # impact_score first, then recency (list is already recency-ordered)
     out.sort(key=lambda e: e.impact_score, reverse=True)
     return out

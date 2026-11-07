@@ -89,7 +89,8 @@ class BroadcastDirector:
                   revision=program.revision, impact=program.level)
         t0 = time.monotonic()
         self._airing = (program.event_id, program.revision)
-        self.playout.air_video(Path(program.asset_path))
+        frame = self._program_frame(program)
+        self.playout.air_video(Path(program.asset_path), frame=frame)
         rc, err = self.playout.wait(stop_check=self._should_cut)
         dur = time.monotonic() - t0
         interrupted = self._interrupt_now
@@ -105,6 +106,33 @@ class BroadcastDirector:
                      program.asset_path, round(dur, 2),
                      interrupted=interrupted)
         self._set_state(BroadcastState.NORMAL_PROGRAMMING, "between programs")
+
+    def _program_frame(self, program: prog.Program) -> Path | None:
+        """Per-program channel chrome — title/level/source baked in."""
+        try:
+            from .frame import render_frame
+            w, h, _ = self.playout._geom()
+            ev = repo.get_event(self.conn, program.event_id) \
+                if program.event_id else None
+            frame = cache_dir() / "frames" / \
+                f"frame_{abs(hash((program.event_id, program.revision)))}.png"
+            render_frame(
+                frame, w, h,
+                title=program.title,
+                level=program.level or "NORMAL",
+                source_line=(ev.source_ids[0] if ev and ev.source_ids
+                             else "authoritative feed"),
+                detail_lines=[
+                    f"revision {program.revision}" if program.revision else "",
+                    (ev.event_type.replace("_", " ") if ev else "")],
+                ticker="monitoring USGS · NWS · EONET — "
+                       "facts verified against the fact ledger",
+            )
+            return frame
+        except Exception as exc:  # noqa: BLE001 — frame is chrome, not content
+            log_event(log, 30, "frame render failed; plain pillarbox",
+                      error=str(exc))
+            return None
 
     def _should_cut(self) -> bool:
         """Mid-program interrupt: only a *different* FLASH revision cuts a

@@ -24,6 +24,9 @@ LEDGER_FIELDS = (
     "alert_event", "severity_text", "certainty", "urgency", "response",
     "sender_name", "headline", "description", "instruction", "motion",
     "effective", "onset", "expires", "ends", "message_type", "awips_id",
+    # EONET natural events
+    "category", "category_title", "closed", "closed_at", "magnitude_unit",
+    "source_url", "eonet_link",
 )
 
 

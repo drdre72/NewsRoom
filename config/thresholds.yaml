@@ -52,6 +52,46 @@ impact:
       weight: 0.15
       values: {immediate: 1.0, expected: 0.7, future: 0.3, past: 0.1}
 
+  # EONET natural events — generic severity+category scorer. `severity` is
+  # the raw magnitudeValue (acres, kts, VEI-class); category carries most of
+  # the newsworthiness. Closed events lose `closed_penalty`.
+  wildfire:
+    severity:   {weight: 0.45, min: 100, max: 500000}   # acres burned
+    category:   {weight: 0.35, default: 0.3, values: {wildfires: 0.75}}
+    closed_penalty: 0.5
+  volcano:
+    severity:   {weight: 0.35, min: 0, max: 5}          # VEI-class index
+    category:   {weight: 0.45, default: 0.3, values: {volcanoes: 0.8}}
+    closed_penalty: 0.4
+  severe_storm:
+    severity:   {weight: 0.45, min: 20, max: 180}       # wind kts
+    category:   {weight: 0.35, default: 0.3, values: {severeStorms: 0.6}}
+    closed_penalty: 0.4
+  flood:
+    severity:   {weight: 0.35, min: 0, max: 10}
+    category:   {weight: 0.45, default: 0.35, values: {floods: 0.6}}
+    closed_penalty: 0.4
+  landslide:
+    severity:   {weight: 0.3, min: 0, max: 10}
+    category:   {weight: 0.45, default: 0.35, values: {landslides: 0.55}}
+    closed_penalty: 0.4
+  snow:
+    severity:   {weight: 0.3, min: 0, max: 200}
+    category:   {weight: 0.4, default: 0.25, values: {snow: 0.4}}
+    closed_penalty: 0.4
+  drought:
+    severity:   {weight: 0.3, min: 0, max: 10}
+    category:   {weight: 0.4, default: 0.25, values: {drought: 0.35}}
+    closed_penalty: 0.3
+  sea_ice:
+    severity:   {weight: 0.3, min: 0, max: 10}
+    category:   {weight: 0.4, default: 0.2, values: {seaLakeIce: 0.3}}
+    closed_penalty: 0.3
+  temp_extreme:
+    severity:   {weight: 0.35, min: 0, max: 10}
+    category:   {weight: 0.4, default: 0.3, values: {tempExtremes: 0.5}}
+    closed_penalty: 0.3
+
   levels:            # score -> level (first match wins, top-down)
     FLASH: 0.85
     BREAKING: 0.60

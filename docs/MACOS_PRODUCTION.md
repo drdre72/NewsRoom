@@ -84,7 +84,10 @@ copies; rerun install):
   render-queue drain (`RunAtLoad`, `KeepAlive` unconditional — even a clean
   SIGTERM respawns; these are always-on services)
 - `com.newsroom.broadcast` — `main.py broadcast`: the Director + HLS playout
-  writing `output/preview/live.m3u8` (local preview; no YouTube output yet)
+  writing `output/preview/live.m3u8`. Each program airs inside a rendered
+  16:9 channel frame (branding, impact chip, provenance, ticker); an RTMP
+  second-output path exists but is gated by BOTH `outputs.rtmp.enabled`
+  and `publishing.automatic` — currently false, nothing leaves the machine
 - `com.newsroom.health` — `main.py preview`: HTTP server on :8788 serving
   the HLS preview, `/status.json` health, and the air log
 
@@ -106,9 +109,27 @@ playlist.
 ### Local preview
 
 Open **http://localhost:8788/** in Safari (HLS plays natively; no JavaScript
-player needed). The same mux will later feed YouTube via a `tee` output —
-what you watch locally is what would stream. `publishing.automatic: false`
-keeps the RTMP output unattached (§66).
+player needed). The same mux can later feed YouTube via FFmpeg's second
+RTMP output — what you watch locally is what would stream. Enabling RTMP
+requires `outputs.rtmp.enabled: true` in `config/broadcast.yaml`, the push
+URL (with stream key) in `NEWSROOM_RTMP_URL` env — never in config/git —
+AND `publishing.automatic: true`. All three are off by default (§66, §77).
+
+### Sources
+
+- **USGS** significant-hour GeoJSON — earthquakes (polled continuously)
+- **NWS** `/alerts/active` — weather alerts (continuous)
+- **NASA EONET** `/api/v3/events` — curated natural events: wildfire,
+  volcano, severe storm, flood, landslide, snow, drought, sea/lake ice,
+  temperature extremes (`poll_every_seconds: 3600`). Earthquake and
+  non-newsworthy categories are skipped — USGS/NWS own those domains.
+
+### On-air voice
+
+Narration is locked to Kokoro MLX `af_heart`
+(`tts.backend_order: [kokoro_mlx]`, `tts.strict_voice: true`): no `say`
+fallback on air — if synthesis fails the render fails rather than ship an
+unapproved voice. Add voices to `backend_order` only after a listen test.
 
 ## Boot recovery (§39)
 
