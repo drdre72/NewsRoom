@@ -31,6 +31,12 @@ def usgs():
     return UsgsAdapter(name="usgs", config={})
 
 
+@pytest.fixture()
+def nws():
+    from newsroom.ingestion.adapters.nws import NwsAdapter
+    return NwsAdapter(name="nws", config={})
+
+
 FIXTURES = ROOT / "src" / "newsroom" / "sim" / "fixtures"
 
 

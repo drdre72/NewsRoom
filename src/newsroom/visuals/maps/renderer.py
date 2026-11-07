@@ -65,6 +65,8 @@ class MapLibreRenderer:
                     page.wait_for_function("window.__idle === true", timeout=15000)
                     out = out_dir / f"{shot.type}_{context.get('seq', 0):02d}.png"
                     page.locator("#map").screenshot(path=str(out))
+                    self._frame(out, plan, context,
+                                label=shot.params.get("label"))
                     self._jobs_done += 1
                     return out
 
@@ -84,16 +86,63 @@ class MapLibreRenderer:
     # -- map setup -------------------------------------------------------
 
     def _map_config(self, plan: VisualPlan, context: dict) -> str:
-        """Fully offline style: painted background + GeoJSON layers only.
-        No public tile endpoints (§20)."""
+        """Fully offline style: painted background + vendored GeoJSON layers
+        only. No public tile endpoints (§20)."""
         ml = _NODE_MODULES / "maplibre-gl" / "dist" / "maplibre-gl.js"
-        style = {
-            "version": 8,
-            "sources": {},
-            "layers": [{
-                "id": "bg", "type": "background",
-                "paint": {"background-color": "#0b1220"},
-            }],
-        }
+        sources: dict = {}
+        layers: list = [{
+            "id": "bg", "type": "background",
+            "paint": {"background-color": "#0b1220"},
+        }]
+        land_path = _WEB_DIR / "assets" / "ne_110m_land.geojson"
+        if land_path.exists():
+            land = json.loads(land_path.read_text())
+            sources["land"] = {"type": "geojson", "data": land}
+            layers.append({
+                "id": "land", "type": "fill", "source": "land",
+                "paint": {"fill-color": "#18263f",
+                          "fill-outline-color": "#3a5178"},
+            })
+        graticule = self._graticule()
+        sources["grat"] = {"type": "geojson", "data": graticule}
+        layers.append({
+            "id": "grat", "type": "line", "source": "grat",
+            "paint": {"line-color": "#263252", "line-width": 0.7},
+        })
+        style = {"version": 8, "sources": sources, "layers": layers}
         return json.dumps({"style": style, "maplibrePath": ml.as_uri(),
                            "interactive": False})
+
+    @staticmethod
+    def _graticule(step: int = 10) -> dict:
+        feats = []
+        for lon in range(-180, 181, step):
+            feats.append({"type": "Feature", "geometry": {
+                "type": "LineString",
+                "coordinates": [[lon, -85], [lon, 85]]}})
+        for lat in range(-80, 81, step):
+            feats.append({"type": "Feature", "geometry": {
+                "type": "LineString",
+                "coordinates": [[-180, lat], [180, lat]]}})
+        return {"type": "FeatureCollection", "features": feats}
+
+    def _frame(self, png: Path, plan: VisualPlan, context: dict,
+               label: str | None = None) -> None:
+        """Drop the raw map capture into the standard frame furniture so map
+        shots carry the same header/footer chrome as card shots."""
+        from PIL import Image, ImageDraw
+        from ..renderer import CardRenderer, _font, _FONT_CANDIDATES, PALETTE
+        base = CardRenderer()._base(plan, context)
+        map_img = Image.open(png).convert("RGB")
+        top, bottom = 96, 84
+        region = (0, top, plan.width, plan.height - bottom)
+        base.paste(map_img.crop(region).resize(
+            (plan.width, plan.height - bottom - top)), (0, top))
+        # Locator shots carry a text label the map itself can't draw.
+        if label:
+            d = ImageDraw.Draw(base)
+            d.rounded_rectangle([40, top + 20, 40 + 560, top + 84], radius=12,
+                                fill=PALETTE["panel"])
+            d.text((64, top + 32), label,
+                   font=_font(_FONT_CANDIDATES, 42), fill=PALETTE["text"])
+        base.save(png)

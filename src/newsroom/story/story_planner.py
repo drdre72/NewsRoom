@@ -24,6 +24,17 @@ def _earthquake_sections(event: CanonicalEvent, facts) -> list[str]:
     return sections
 
 
+def _weather_alert_sections(event: CanonicalEvent, facts) -> list[str]:
+    sections = ["headline", "alert_and_area", "timing"]
+    fields = {f.field for f in facts}
+    if {"severity_text", "certainty", "urgency"} & fields:
+        sections.append("official_assessment")
+    if "instruction" in fields:
+        sections.append("instructions")
+    sections.append("unknowns")
+    return sections
+
+
 def plan_story(
     conn: sqlite3.Connection, event_id: str, story_type: str = "breaking"
 ) -> StoryPlan | None:
@@ -33,6 +44,8 @@ def plan_story(
     facts = repo.current_facts(conn, event_id)
     if event.event_type == "earthquake":
         sections = _earthquake_sections(event, facts)
+    elif event.event_type == "weather_alert":
+        sections = _weather_alert_sections(event, facts)
     else:
         sections = ["headline", "what", "where", "when", "unknowns"]
     return StoryPlan(

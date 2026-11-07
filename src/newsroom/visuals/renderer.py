@@ -115,15 +115,21 @@ class CardRenderer:
         draw.text((62, 32), level, font=font_h, fill=(255, 255, 255))
         draw.text((w - 40, 34), "NEWSROOM", font=_font(_MONO_CANDIDATES, 40),
                   fill=PALETTE["muted"], anchor="ra")
-        # footer source strip
+        # footer source strip — source id left, update time right, never
+        # allowed to overlap (NWS URNs are long).
         draw.rectangle([0, h - 84, w, h], fill=PALETTE["bg2"])
+        f_foot = _font(_MONO_CANDIDATES, 30)
+        updated = context.get("updated", "")
+        upd_w = self._tw(draw, updated, f_foot) if updated else 0
         src = context.get("source_line", "")
         if src:
-            draw.text((40, h - 64), src, font=_font(_MONO_CANDIDATES, 30),
-                      fill=PALETTE["muted"])
-        updated = context.get("updated", "")
-        draw.text((w - 40, h - 64), updated, font=_font(_MONO_CANDIDATES, 30),
-                  fill=PALETTE["muted"], anchor="ra")
+            max_w = w - 80 - upd_w - 40
+            while src and self._tw(draw, src, f_foot) > max_w:
+                src = src[:-4].rstrip(":.") + "…"
+            draw.text((40, h - 64), src, font=f_foot, fill=PALETTE["muted"])
+        if updated:
+            draw.text((w - 40, h - 64), updated, font=f_foot,
+                      fill=PALETTE["muted"], anchor="ra")
         return img
 
     def _tw(self, draw, text: str, font) -> int:
@@ -302,11 +308,18 @@ class CardRenderer:
                   font=_font(_FONT_CANDIDATES, 60), fill=PALETTE["text"])
 
 
+# Shot types that belong to the geographic backend when it's installed.
+MAP_SHOT_TYPES = frozenset({"locator_map", "globe_to_location", "impact_radius"})
+
+
 def render_plan(renderer: ShotRenderer, plan: VisualPlan, out_dir: Path,
-                context: dict) -> list[Path]:
+                context: dict,
+                map_renderer: ShotRenderer | None = None) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     paths = []
     for i, shot in enumerate(plan.shots):
         ctx = dict(context, seq=i)
-        paths.append(renderer.render_shot(shot, plan, out_dir, ctx))
+        r = (map_renderer if map_renderer and shot.type in MAP_SHOT_TYPES
+             else renderer)
+        paths.append(r.render_shot(shot, plan, out_dir, ctx))
     return paths

@@ -31,9 +31,14 @@ class OllamaClient(LLMClient):
             installed = {m["name"] for m in self._get("/api/tags").get("models", [])}
         except Exception:  # noqa: BLE001 — server may be down; treat as none
             return ""
-        for want in settings.get("models", {}).get("llm", {}).get("preferred", []):
-            if want in installed or any(m.startswith(want.split(":")[0]) for m in installed):
+        for want in settings.get("llm.preferred", []) or []:
+            if want in installed:
                 return want
+            base = want.split(":")[0]
+            match = next((m for m in installed
+                          if m.split(":")[0] == base or m == base), None)
+            if match:          # installed under a different tag of the family
+                return match
         return next(iter(installed), "")
 
     def _get(self, path: str) -> dict:

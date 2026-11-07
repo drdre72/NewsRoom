@@ -22,12 +22,25 @@ anything else.
 | FFmpeg (arm64) | `brew install ffmpeg` | media composition, RTMP encode |
 | Node.js (arm64) | `brew install node` | Playwright / map tooling |
 | Ollama | `brew install ollama` | local LLM (`ollama serve` runs on demand) |
-| whisper.cpp | `brew install whisper-cpp` | speech alignment (Metal) |
+| whisper.cpp | `brew install whisper.cpp` | speech alignment (Metal) |
 | Chromium | `uv run playwright install chromium` | deterministic frame rendering |
+| maplibre-gl | `npm i` (repo package.json) | offline map rendering, pinned v4 |
 
 `h264_videotoolbox` must appear in `ffmpeg -encoders`. If it does not, the
 FFmpeg build is wrong — do not fall back to `libx264` for 24/7 operation
 (§29).
+
+Post-install model pulls (kept out of git — `models/` and HF caches):
+
+```bash
+ollama pull qwen3:8b            # or rely on an installed preferred model
+# whisper model → path configured in settings.yaml alignment.model_path
+curl -L -o models/ggml-base.en.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
+```
+
+Kokoro (`mlx-community/Kokoro-82M-bf16`) and the misaki spacy model
+download automatically on first synthesis into the HF cache.
 
 ## Memory model (16 GB)
 

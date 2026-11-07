@@ -20,6 +20,10 @@ LEDGER_FIELDS = (
     "title", "status", "severity", "magnitude", "mag_type",
     "latitude", "longitude", "depth_km", "location_label",
     "occurred_at", "tsunami", "alert", "sig", "mmi", "felt",
+    # weather_alert (NWS CAP)
+    "alert_event", "severity_text", "certainty", "urgency", "response",
+    "sender_name", "headline", "description", "instruction", "motion",
+    "effective", "onset", "expires", "ends", "message_type", "awips_id",
 )
 
 

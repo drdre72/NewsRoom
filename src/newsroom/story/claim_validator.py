@@ -38,13 +38,24 @@ def _extract_numbers(text: str) -> list[str]:
     return [m.group(0) for m in _NUM_RE.finditer(text)]
 
 
-def _fact_numbers(facts: list[Fact]) -> set[str]:
-    out: set[str] = set()
+def _num_key(token: str) -> float | None:
+    try:
+        return float(token)
+    except ValueError:
+        return None
+
+
+def _fact_number_keys(facts: list[Fact]) -> set[float]:
+    """Canonical numeric values present in the ledger. Compared as floats so
+    'November 7' traces to ISO '07' and '5.5' to '5.50'."""
+    out: set[float] = set()
     for f in facts:
         for n in _extract_numbers(str(f.value_display)):
-            out.add(n)
+            if (k := _num_key(n)) is not None:
+                out.add(k)
         for n in _extract_numbers(str(f.value)):
-            out.add(n)
+            if (k := _num_key(n)) is not None:
+                out.add(k)
     return out
 
 
@@ -61,7 +72,7 @@ def validate_script(
 ) -> tuple[bool, list[str]]:
     errors: list[str] = []
     known = ctx.fact_by_id()
-    fact_numbers = _fact_numbers(ctx.all_facts or ctx.current)
+    fact_number_keys = _fact_number_keys(ctx.all_facts or ctx.current)
     risk_fields = set(settings.get("high_risk_fields", []) or [])
 
     if not script.segments:
@@ -83,7 +94,10 @@ def validate_script(
             errors.append(f"segment {i}: high-risk claim '{hit}' unsupported by cited facts")
 
         for num in _extract_numbers(seg.text):
-            if num in fact_numbers or _BENIGN_NUMBERS.match(num):
+            if _BENIGN_NUMBERS.match(num):
+                continue
+            key = _num_key(num)
+            if key is not None and key in fact_number_keys:
                 continue
             # Numbers inside cited fact values only. e.g. "6.4" must appear in
             # a fact; a 4-digit year in an ISO timestamp fact is also fine.

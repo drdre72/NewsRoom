@@ -39,13 +39,36 @@ def _earthquake_score(snapshot: dict[str, Any], cfg: dict) -> float:
     return min(1.0, total)
 
 
+def _mapped(snapshot: dict[str, Any], field: str, cfg: dict,
+            default: float = 0.0) -> float:
+    """Weighted lookup for categorical fields (CAP severity/certainty/etc)."""
+    key = str(snapshot.get(field) or "").lower()
+    return cfg.get("weight", 0) * cfg.get("values", {}).get(
+        key, cfg.get("default", default))
+
+
+def _weather_alert_score(snapshot: dict[str, Any], cfg: dict) -> float:
+    total = _mapped(snapshot, "alert_event",
+                    cfg.get("alert_criticality", {}), default=0.25)
+    for name, field in (("cap_severity", "severity_text"),
+                        ("certainty", "certainty"),
+                        ("urgency", "urgency")):
+        total += _mapped(snapshot, field, cfg.get(name, {}))
+    return min(1.0, total)
+
+
 def score_impact(
     event_type: str, snapshot: dict[str, Any], settings: Settings
 ) -> tuple[float, str]:
     """Return (score 0..1, ImpactLevel value)."""
     engine_cfg = settings.get("impact", {}) or {}
     type_cfg = engine_cfg.get(event_type, {})
-    score = _earthquake_score(snapshot, type_cfg) if event_type == "earthquake" else 0.0
+    if event_type == "earthquake":
+        score = _earthquake_score(snapshot, type_cfg)
+    elif event_type == "weather_alert":
+        score = _weather_alert_score(snapshot, type_cfg)
+    else:
+        score = 0.0
 
     level = ImpactLevel.BACKGROUND.value
     for name, cutoff in (engine_cfg.get("levels", {}) or {}).items():

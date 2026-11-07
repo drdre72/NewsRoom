@@ -114,20 +114,34 @@ def render_short(
     # --- narration (per-segment => real durations, honest captions) -----
     engine = select_engine(settings)
     narration = None
+    narration_degraded = False
     caption_items: list[tuple[float, float, str]] = []
     seg_wavs: list[Path] = []
     if engine:
+        voice = (settings.get("tts.kokoro_voice")
+                 if engine.name == "kokoro_mlx" else
+                 settings.get("tts.say_voice"))
         t = _TITLE_S
         for i, seg in enumerate(script.segments):
             wav = audio_dir / f"seg_{i:02d}.wav"
-            try:
-                res = engine.synthesize(seg.text, seg.speech_text,
-                                        settings.get("tts.kokoro_voice",
-                                                     settings.get("tts.say_voice", "")),
-                                        wav)
-            except Exception as exc:  # noqa: BLE001 — TTS failure policy §37
-                log_event(log, 40, "segment tts failed; continuing without",
-                          engine=engine.name, error=str(exc))
+            res = None
+            # Per-segment degrade: preferred engine, then `say` (§37).
+            for candidate in _tts_chain(engine, settings):
+                try:
+                    res = candidate.synthesize(
+                        seg.text, seg.speech_text, voice or
+                        settings.get("tts.say_voice", ""), wav)
+                    if candidate is not engine:
+                        log_event(log, 30, "tts degraded",
+                                  engine=engine.name, fallback=candidate.name,
+                                  segment=i)
+                        narration_degraded = True
+                    break
+                except Exception as exc:  # noqa: BLE001 — TTS failure policy §37
+                    log_event(log, 40, "segment tts failed",
+                              engine=candidate.name, error=str(exc),
+                              segment=i)
+            if res is None:
                 break
             seg_wavs.append(res.path)
             seg.duration_s = res.duration_s
@@ -165,20 +179,23 @@ def render_short(
     for s in middle:
         s.duration_s = round(max(2.0, s.duration_s * target_mid / cur_mid), 2)
 
-    renderer = _select_renderer(settings)
+    card_renderer = CardRenderer()
+    map_renderer = _select_map_renderer(settings)
     context = {
         "level": event.impact_level,
-        "event_label": event.event_type,
+        "event_label": event.event_type.replace("_", " "),
         "source_line": f"SOURCE: {event.source_ids[0] if event.source_ids else 'unknown'}",
         "updated": f"UPDATED {event.last_updated[11:19]} UTC",
     }
-    shot_paths = render_plan(renderer, vplan, shots_dir, context)
+    shot_paths = render_plan(card_renderer, vplan, shots_dir, context,
+                             map_renderer=map_renderer)
 
     # --- captions + compose ----------------------------------------------
     ass = write_ass(caption_items, work / "captions.ass", w, h)
     write_srt(caption_items, work / "captions.srt")
     timeline = Timeline(width=w, height=h, fps=fps,
-                        audio=narration, caption_items=caption_items)
+                        audio=narration, audio_delay_s=_TITLE_S,
+                        caption_items=caption_items)
     for shot, path in zip(vplan.shots, shot_paths):
         timeline.visuals.append(VisualSegment(
             source=path, duration_s=shot.duration_s,
@@ -198,13 +215,15 @@ def render_short(
         "script": {"generator": script.generator, "validated": script.validated,
                    "hash": _sha256(work / "captions.srt")},
         "audio": {"engine": engine.name if engine else None,
+                  "degraded": narration_degraded,
                   "hash": _sha256(narration) if narration else None},
         "visual_plan_hash": hashlib.sha256(
             json.dumps(vplan.to_dict(), sort_keys=True).encode()).hexdigest(),
         "video": {"path": str(out), "hash": _sha256(out), "width": w,
                   "height": h, "fps": fps},
         "tts_model": engine.name if engine else None,
-        "renderer": renderer.name,
+        "renderer": (f"{card_renderer.name}+{map_renderer.name}"
+                     if map_renderer else card_renderer.name),
         "platform": "macos-arm64",
         "dry_run": dry_run,
     }
@@ -219,13 +238,23 @@ def render_short(
     manifest["publication_gate"] = gate
     mpath.write_text(json.dumps(manifest, indent=2))
     log_event(log, 20, "render complete", event_id=event_id, revision=rev,
-              video=str(out), gate=gate["verdict"], renderer=renderer.name,
+              video=str(out), gate=gate["verdict"],
+              renderer=manifest["renderer"],
               tts=engine.name if engine else None)
     return manifest
 
 
-def _select_renderer(settings: Settings):
-    """MapLibre when the stack is installed; cards otherwise (§37)."""
+def _tts_chain(engine, settings) -> list:
+    """Preferred engine, then `say` as the always-present safety net (§37)."""
+    from .audio.tts import SayEngine
+    chain = [engine]
+    if engine.name != "say":
+        chain.append(SayEngine(settings))
+    return chain
+
+
+def _select_map_renderer(settings: Settings):
+    """MapLibre for geographic shots when installed; else None → cards (§37)."""
     try:
         from .visuals.maps.renderer import MapLibreRenderer
         ml = MapLibreRenderer()
@@ -234,4 +263,4 @@ def _select_renderer(settings: Settings):
             return ml
     except Exception:  # noqa: BLE001
         pass
-    return CardRenderer()
+    return None

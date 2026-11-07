@@ -48,7 +48,7 @@ tts:
 
 alignment:
   whisper_binary: ""       # path to whisper-cli; empty = auto-detect
-  model_path: ""           # ggml model path for whisper.cpp
+  model_path: "models/ggml-base.en.bin"   # ggml model, root-relative
 
 video:
   shorts:

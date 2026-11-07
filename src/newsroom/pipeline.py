@@ -186,6 +186,11 @@ def ingest_observation(
         event.last_updated = retrieved_at
         event.occurred_at = norm.occurred_at or event.occurred_at
         event.extra.update({"source_status": norm.status})
+        # Fusion discriminator for sub-typed families (§16): adapters expose
+        # it as fields.alert_event; stored on the event so candidate checks
+        # stay comparable across sources.
+        if norm.fields.get("alert_event"):
+            event.extra["alert_event"] = norm.fields["alert_event"]
 
         impact_score, level = score_impact(event.event_type, merged_snapshot,
                                            load_settings())

@@ -14,9 +14,10 @@ sources:
   nws:
     kind: nws_cap
     authority: 1.0
-    enabled: false       # Phase — second vertical slice (§86)
+    enabled: true
     feeds:
       alerts: https://api.weather.gov/alerts/active
+    poll_feed: alerts
 
   eonet:
     kind: nasa_eonet

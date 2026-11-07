@@ -7,7 +7,7 @@ for machine requirements and the full spec.
 ## Commands
 
 ```bash
-uv sync --extra dev          # env + deps (pytest, pyyaml, pillow)
+uv sync --extra dev --extra maps --extra tts   # full env; sync trims unlisted extras
 python main.py doctor        # environment verification (required first step)
 python main.py status        # newsroom health JSON/table
 python main.py simulate <scenario>   # offline end-to-end demo; 'list' shows all
@@ -18,9 +18,14 @@ python main.py story <id>    # revision + fact-ledger history for an event
 .venv/bin/python -m pytest tests/    # offline unit tests (no internet needed)
 ```
 
-Optional extras: `--extra tts` (Kokoro MLX), `--extra maps` (Playwright).
-Pipelines degrade gracefully without them per §37 fallback policy —
-`say` TTS and Pillow card renderer are the always-on fallbacks.
+Extras: `tts` = mlx-audio + misaki (Kokoro MLX narration), `maps` = Playwright
+(+ `npm i` for maplibre-gl, vendored in package.json), `dev` = pytest.
+`ollama serve` must be running for the LLM script path; otherwise scripts
+fall back to the deterministic template (§37). whisper.cpp comes from
+`brew install whisper.cpp` and needs a ggml model in `models/`
+(see `config/settings.yaml` `alignment.model_path`).
+Pipelines degrade gracefully without them: `say` TTS and Pillow card
+renderer are the always-on fallbacks.
 
 ## Invariants to preserve
 
@@ -38,7 +43,7 @@ Pipelines degrade gracefully without them per §37 fallback policy —
 ```
 config/            all tunables (yaml) — sources, thresholds, models
 src/newsroom/
-  ingestion/       adapters (usgs), normalizer, fusion, revisions, polling
+  ingestion/       adapters (usgs, nws), normalizer, fusion, revisions, polling
   intelligence/    fact_ledger, impact_engine, confidence_engine, freshness
   story/           planner, script_generator, claim_validator, memory
   llm/             ollama client + JSON schemas

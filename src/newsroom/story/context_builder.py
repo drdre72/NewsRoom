@@ -17,6 +17,7 @@ from ..storage import repositories as repo
 class FactContext:
     event_id: str
     revision: int
+    event_type: str = "unknown"
     current: list[Fact] = field(default_factory=list)
     all_facts: list[Fact] = field(default_factory=list)   # current + superseded
     revisions: list[dict] = field(default_factory=list)   # field: initial->current
@@ -62,6 +63,7 @@ def build_fact_context(conn: sqlite3.Connection, event_id: str) -> FactContext:
     return FactContext(
         event_id=event_id,
         revision=event.current_revision if event else 0,
+        event_type=event.event_type if event else "unknown",
         current=current,
         all_facts=all_facts,
         revisions=rev_summaries,

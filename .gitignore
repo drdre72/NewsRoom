@@ -16,6 +16,6 @@ newsroom.db*
 logs/
 cache/
 output/
+models/
 node_modules/
-package-lock.json
 .DS_Store

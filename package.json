@@ -1,0 +1,20 @@
+{
+  "name": "newsroom",
+  "version": "1.0.0",
+  "description": "A **local-first, zero-recurring-cost autonomous newsroom** for Apple Silicon macOS. It watches authoritative real-world sources, maintains an auditable model of events and their revisions, explains them with fact-constrained local AI, visualizes them geographically, and produces Shorts, long-form video, and (eventually) a persistent YouTube Live stream.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "maplibre-gl": "^4.7.1"
+  }
+}

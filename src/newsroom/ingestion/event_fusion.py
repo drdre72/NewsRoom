@@ -48,6 +48,14 @@ def should_fuse(
     """Deterministic fusion predicate with an explanation string."""
     if obs.event_type != candidate.event_type:
         return False, "different event_type"
+    # Same-family sub-type discriminator: a Tornado Warning and a Flood Watch
+    # for the same county are different incidents, however near in time/space.
+    if obs.event_type == "weather_alert":
+        alert = (obs.fields.get("alert_event") or "").lower()
+        cand_alert = str(
+            getattr(candidate, "extra", {}).get("alert_event") or "").lower()
+        if alert and cand_alert and alert != cand_alert:
+            return False, f"different alert type '{alert}' vs '{cand_alert}'"
     gap = time_gap_seconds(obs.occurred_at, candidate.occurred_at or candidate.first_seen)
     if gap is not None and gap > time_window_s:
         return False, f"time gap {gap:.0f}s > {time_window_s:.0f}s"

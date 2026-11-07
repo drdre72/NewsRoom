@@ -54,9 +54,18 @@ def compose_short(
         last = "vout"
     filtergraph = ";".join(chains)
 
+    vdur = timeline.video_duration()
+    if audio_index is not None:
+        # Delay narration to sit under its captions (title card plays silent),
+        # then pad silence to full video duration so stream lengths match.
+        ms = round(timeline.audio_delay_s * 1000)
+        chains.append(f"[{audio_index}:a]adelay={ms}|{ms},"
+                      f"apad=whole_dur={vdur:.3f}[aout]")
+        filtergraph = ";".join(chains)
+
     args += ["-filter_complex", filtergraph, "-map", f"[{last}]"]
     if audio_index is not None:
-        args += ["-map", f"{audio_index}:a"]
+        args += ["-map", "[aout]"]
 
     args += ["-c:v", encoder, "-pix_fmt", "yuv420p"]
     if encoder == "h264_videotoolbox":
@@ -66,7 +75,7 @@ def compose_short(
     if audio_index is not None:
         args += ["-c:a", settings.get("video.audio_codec", "aac"),
                  "-b:a", settings.get("video.audio_bitrate", "160k")]
-    args += ["-t", f"{timeline.video_duration():.3f}",
+    args += ["-t", f"{vdur:.3f}",
              "-movflags", "+faststart", str(out_path)]
 
     out_path.parent.mkdir(parents=True, exist_ok=True)

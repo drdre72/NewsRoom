@@ -19,6 +19,39 @@ impact:
     shallow_depth:
       weight: 0.0     # reserved; depth_km <= 35 -> 1, <= 70 -> 0.5 else 0
 
+  # NWS CAP alerts: alert type dominates, then CAP severity/certainty/urgency.
+  weather_alert:
+    alert_criticality:
+      weight: 0.40
+      default: 0.25      # unlisted alert types
+      values:
+        tornado emergency: 1.0
+        tornado warning: 1.0
+        tsunami warning: 1.0
+        flash flood emergency: 1.0
+        hurricane warning: 0.9
+        typhoon warning: 0.9
+        storm surge warning: 0.9
+        extreme wind warning: 0.9
+        flash flood warning: 0.8
+        severe thunderstorm warning: 0.55
+        flood warning: 0.55
+        winter storm warning: 0.45
+        tornado watch: 0.4
+        red flag warning: 0.4
+        severe thunderstorm watch: 0.3
+        flood watch: 0.3
+        heat advisory: 0.2
+    cap_severity:
+      weight: 0.25
+      values: {extreme: 1.0, severe: 0.75, moderate: 0.45, minor: 0.2}
+    certainty:
+      weight: 0.20
+      values: {observed: 1.0, likely: 0.7, possible: 0.4, unlikely: 0.15}
+    urgency:
+      weight: 0.15
+      values: {immediate: 1.0, expected: 0.7, future: 0.3, past: 0.1}
+
   levels:            # score -> level (first match wins, top-down)
     FLASH: 0.85
     BREAKING: 0.60

@@ -11,6 +11,7 @@ llm:
     - gemma3:4b
 
 tts:
+  kokoro_model: mlx-community/Kokoro-82M-bf16
   kokoro_voice: af_heart
   say_voice: Samantha
 

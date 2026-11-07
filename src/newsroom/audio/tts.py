@@ -55,19 +55,30 @@ class KokoroMlxEngine(TTSEngine):
 
     def synthesize(self, display_text: str, speech_text: str, voice: str,
                    out_path: Path) -> AudioResult:
-        # CLI invocation keeps us version-tolerant; wav lands beside out_path.
+        import sys
+        # sys.executable = the venv interpreter that has mlx_audio; a bare
+        # `python` would resolve to the system interpreter without it.
+        model = self.settings.get(
+            "tts.kokoro_model", "mlx-community/Kokoro-82M-v1.0-4bit")
         cmd = [
-            "python", "-m", "mlx_audio.tts.generate",
+            sys.executable, "-m", "mlx_audio.tts.generate",
+            "--model", model,
             "--text", speech_text, "--voice", voice,
             "--file_prefix", str(out_path.with_suffix("")),
             "--audio_format", "wav",
         ]
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-        produced = out_path.with_suffix(".wav")
-        if proc.returncode != 0 or not produced.exists():
+        produced = sorted(out_path.parent.glob(
+            f"{out_path.stem}_*.wav"))
+        if proc.returncode != 0 or not produced:
             raise RuntimeError(f"kokoro synthesis failed: {proc.stderr[-400:]}")
-        return AudioResult(path=produced, duration_s=_wav_seconds(produced),
-                           sample_rate=_wav_rate(produced), engine=self.name,
+        out_wav = out_path.with_suffix(".wav")
+        if len(produced) == 1:
+            produced[0].replace(out_wav)
+        else:
+            _concat_wavs(produced, out_wav)   # long text splits into parts
+        return AudioResult(path=out_wav, duration_s=_wav_seconds(out_wav),
+                           sample_rate=_wav_rate(out_wav), engine=self.name,
                            voice=voice)
 
 
@@ -127,6 +138,20 @@ def select_engine(settings: Settings) -> TTSEngine | None:
         if ok:
             return engine
     return None
+
+
+def _concat_wavs(parts: list[Path], out: Path) -> None:
+    """Join kokoro's numbered output parts into one wav via ffmpeg concat."""
+    listfile = out.with_suffix(".concat.txt")
+    listfile.write_text(
+        "".join(f"file '{p}'\n" for p in parts), encoding="utf-8")
+    subprocess.run(
+        ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+         "-f", "concat", "-safe", "0", "-i", str(listfile), str(out)],
+        check=True, capture_output=True, timeout=120)
+    listfile.unlink(missing_ok=True)
+    for p in parts:
+        p.unlink(missing_ok=True)
 
 
 def _wav_seconds(path: Path) -> float:

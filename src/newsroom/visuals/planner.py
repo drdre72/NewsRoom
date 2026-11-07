@@ -18,6 +18,21 @@ def _fmap(facts: list[Fact]) -> dict[str, Fact]:
     return {f.field: f for f in facts}
 
 
+# Metric-grid fields per event family (first six render).
+_METRICS_BY_TYPE = {
+    "earthquake": (("magnitude", "MAGNITUDE"), ("depth_km", "DEPTH"),
+                   ("occurred_at", "TIME UTC"), ("tsunami", "TSUNAMI"),
+                   ("alert", "PAGER ALERT"), ("sig", "SIGNIFICANCE"),
+                   ("mmi", "MAX MMI"), ("status", "STATUS")),
+    "weather_alert": (("alert_event", "ALERT"), ("severity_text", "SEVERITY"),
+                      ("certainty", "CERTAINTY"), ("urgency", "URGENCY"),
+                      ("expires", "EXPIRES"), ("response", "RESPONSE"),
+                      ("sender_name", "OFFICE")),
+}
+_METRICS_GENERIC = (("title", "EVENT"), ("occurred_at", "TIME UTC"),
+                    ("status", "STATUS"))
+
+
 def plan_visuals(
     conn: sqlite3.Connection,
     event: CanonicalEvent,
@@ -41,16 +56,15 @@ def plan_visuals(
                           params={
                               "lat": event.latitude, "lon": event.longitude,
                               "label": event.location_label,
+                              "zoom": 4.5,
+                              "rings_km": [100, 250, 500],
                               "depth_km": f.get("depth_km").value_display if f.get("depth_km") else None,
                               "magnitude": f["magnitude"].value_display if "magnitude" in f else None,
                               "tsunami": bool(f["tsunami"].value) if "tsunami" in f else None,
                           }))
 
     metrics = []
-    for field, label in (("magnitude", "MAGNITUDE"), ("depth_km", "DEPTH"),
-                         ("occurred_at", "TIME UTC"), ("tsunami", "TSUNAMI"),
-                         ("alert", "PAGER ALERT"), ("sig", "SIGNIFICANCE"),
-                         ("mmi", "MAX MMI"), ("status", "STATUS")):
+    for field, label in _METRICS_BY_TYPE.get(event.event_type, _METRICS_GENERIC):
         if field in f:
             metrics.append({"label": label, "value": f[field].value_display})
     if metrics:

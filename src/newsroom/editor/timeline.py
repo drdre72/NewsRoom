@@ -23,6 +23,7 @@ class Timeline:
     fps: int
     visuals: list[VisualSegment] = field(default_factory=list)
     audio: Path | None = None
+    audio_delay_s: float = 0.0      # narration offset vs t=0 (title card)
     caption_items: list[tuple[float, float, str]] = field(default_factory=list)
 
     def video_duration(self) -> float:

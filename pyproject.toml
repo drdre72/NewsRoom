@@ -11,7 +11,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # Optional production backends — the pipeline degrades gracefully without them.
-tts = ["mlx-audio>=0.2.0"]
+tts = ["mlx-audio>=0.2.0", "misaki[en]>=0.9.4"]
 maps = ["playwright>=1.45.0"]
 dev = ["pytest>=8.3.0"]
 

@@ -1,8 +1,10 @@
 from .base import SourceAdapter, FetchResult
 from .usgs import UsgsAdapter
+from .nws import NwsAdapter
 
 _REGISTRY = {
     "usgs_geojson": UsgsAdapter,
+    "nws_cap": NwsAdapter,
 }
 
 

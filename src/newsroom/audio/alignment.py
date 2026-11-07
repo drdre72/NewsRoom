@@ -61,9 +61,14 @@ def _align_with_whisper(
     segments: list[ScriptSegment], audio_path: Path,
     binary: str, settings: Settings,
 ) -> AlignmentResult:
-    model = settings.get("alignment.model_path") or ""
+    configured = settings.get("alignment.model_path") or ""
+    model = ""
+    if configured:
+        from ..paths import resolve
+        model = str(resolve(configured))
     out_prefix = audio_path.with_suffix("")
-    cmd = [binary, "-f", str(audio_path), "-oj", "-of", str(out_prefix)]
+    # -ojf (full json) is what populates per-token offsets for word timing.
+    cmd = [binary, "-f", str(audio_path), "-ojf", "-of", str(out_prefix)]
     if model:
         cmd += ["-m", model]
     subprocess.run(cmd, capture_output=True, text=True, timeout=300, check=True)
@@ -72,9 +77,10 @@ def _align_with_whisper(
     for chunk in data.get("transcription", []):
         for w in chunk.get("tokens", []) or []:
             offsets = w.get("offsets", {})
-            if offsets:
+            word = str(w.get("text", "")).strip()
+            if offsets and word and not word.startswith("[_"):  # skip [_BEG_] etc
                 words.append(WordTiming(
-                    word=w.get("text", ""),
+                    word=word,
                     start_s=offsets.get("from", 0) / 1000.0,
                     end_s=offsets.get("to", 0) / 1000.0,
                 ))
