@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:geo="http://www.w3.org/2003/01/geo/wgs84_pos#" xmlns:gdacs="http://www.gdacs.org">
+<channel><title>GDACS RSS</title>
+<item>
+  <title>Red tropical cyclone alert for TYPHOON-26 in Philippines</title>
+  <description>From 06/11/2026 to 09/11/2026, a Tropical Cyclone (maximum wind speed of 150 km/h) was forecast to strike.</description>
+  <link>https://www.gdacs.org/report.aspx?eventtype=TC&amp;eventid=1002999</link>
+  <pubDate>Fri, 06 Nov 2026 14:00:00 GMT</pubDate>
+  <gdacs:eventtype>TC</gdacs:eventtype>
+  <gdacs:alertlevel>Red</gdacs:alertlevel>
+  <gdacs:eventid>1002999</gdacs:eventid>
+  <gdacs:episodeid>4</gdacs:episodeid>
+  <gdacs:severity unit="km/h" value="150">150 km/h</gdacs:severity>
+  <gdacs:population>3500000</gdacs:population>
+  <gdacs:vulnerability>High</gdacs:vulnerability>
+  <gdacs:country>Philippines</gdacs:country>
+  <gdacs:fromdate>2026-11-06T14:00:00Z</gdacs:fromdate>
+  <gdacs:todate>2026-11-09T14:00:00Z</gdacs:todate>
+  <geo:Point><geo:lat>14.2</geo:lat><geo:long>122.5</geo:long></geo:Point>
+</item>
+<item>
+  <title>Green flood alert in Bangladesh</title>
+  <description>Flood in Bangladesh from 05/11/2026.</description>
+  <link>https://www.gdacs.org/report.aspx?eventtype=FL&amp;eventid=1003100</link>
+  <pubDate>Thu, 05 Nov 2026 08:00:00 GMT</pubDate>
+  <gdacs:eventtype>FL</gdacs:eventtype>
+  <gdacs:alertlevel>Green</gdacs:alertlevel>
+  <gdacs:eventid>1003100</gdacs:eventid>
+  <gdacs:episodeid>1</gdacs:episodeid>
+  <gdacs:severity unit="" value="1.8">score 1.8</gdacs:severity>
+  <gdacs:population>120000</gdacs:population>
+  <gdacs:country>Bangladesh</gdacs:country>
+  <gdacs:fromdate>2026-11-05T08:00:00Z</gdacs:fromdate>
+  <gdacs:todate>2026-11-12T08:00:00Z</gdacs:todate>
+  <geo:Point><geo:lat>23.7</geo:lat><geo:long>90.4</geo:long></geo:Point>
+</item>
+</channel></rss>

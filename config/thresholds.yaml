@@ -92,6 +92,24 @@ impact:
     category:   {weight: 0.4, default: 0.3, values: {tempExtremes: 0.5}}
     closed_penalty: 0.3
 
+  # GDACS + SWPC families — same generic scorer (severity + category +
+  # alert_level mappings). NOTE: mapped values are matched lower-cased.
+  tropical_cyclone:
+    severity:   {weight: 0.4, min: 30, max: 180}        # wind kts
+    category:   {weight: 0.3, default: 0.4}
+    alert_level: {weight: 0.3, values: {green: 0.2, orange: 0.7, red: 1.0}}
+  tsunami_warning:
+    severity:   {weight: 0.4, min: 0, max: 10}
+    category:   {weight: 0.3, default: 0.6}
+    alert_level: {weight: 0.3, values: {green: 0.3, orange: 0.7, red: 1.0}}
+  space_weather:
+    severity:   {weight: 0.5, min: 3, max: 9}           # planetary K-index
+    category:   {weight: 0.3, default: 0.35}
+    alert_level: {weight: 0.2, values: {g1: 0.4, g2: 0.55, g3: 0.7, g4: 0.85,
+                                        g5: 1.0, r1: 0.3, r2: 0.45, r3: 0.6,
+                                        r4: 0.75, r5: 0.9, s1: 0.3, s2: 0.45,
+                                        s3: 0.6, s4: 0.75, s5: 0.9}}
+
   levels:            # score -> level (first match wins, top-down)
     FLASH: 0.85
     BREAKING: 0.60
@@ -103,6 +121,7 @@ confidence:
   base_by_source:    # source authority -> base confidence
     usgs: 0.95
     nws: 0.95
+    swpc: 0.90
     eonet: 0.80
     gdacs: 0.80
     default: 0.50

@@ -21,7 +21,8 @@ SEGMENT_TYPES = {
     "world_weather": ["weather_alert"],
     "international": ["wildfire", "volcano", "severe_storm", "flood",
                       "landslide", "snow", "drought", "sea_ice",
-                      "temp_extreme"],
+                      "temp_extreme", "tropical_cyclone", "tsunami_warning"],
+    "space_weather": ["space_weather"],
 }
 
 
@@ -93,20 +94,34 @@ def pick_interrupt(conn: sqlite3.Connection, settings: Settings) -> Program | No
     return None
 
 
+_LEVEL_RANK = {"FLASH": 4, "BREAKING": 3, "UPDATE": 2,
+               "NORMAL": 1, "BACKGROUND": 0}
+
+
 def pick_next(conn: sqlite3.Connection, settings: Settings) -> Program | None:
-    """Rundown order: segments by priority; first eligible item wins."""
+    """Rundown, severity-first: each segment nominates its best eligible
+    event; the most important candidate across ALL segments airs next
+    (level -> score -> recency). Segment priority only breaks ties —
+    it decides which desk a story airs under, not whether it airs."""
     segments = settings.get("rundown.segments", []) or []
-    segments = sorted(segments, key=lambda s: -int(s.get("priority", 0)))
+    candidates = []
     for seg in segments:
         seg_id = seg.get("id")
         cadence_s = int(seg.get("max_air_every_min", 30)) * 60
         if repo.aired_recently(conn, seg_id, cadence_s):
             continue  # segment aired inside its cadence window
-        for ev in _eligible_events(conn, settings,
-                                   SEGMENT_TYPES.get(seg_id), cadence_s):
-            asset = repo.latest_video_asset(
-                conn, ev.event_id, ev.current_revision)
-            return Program("story", seg_id, ev.event_id, ev.current_revision,
-                           asset["path"], ev.title or ev.event_id,
-                           ev.impact_level)
-    return None
+        eligible = _eligible_events(conn, settings,
+                                    SEGMENT_TYPES.get(seg_id), cadence_s)
+        if eligible:
+            candidates.append((seg, eligible[0]))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda c: (
+        -_LEVEL_RANK.get(c[1].impact_level, 0),
+        -c[1].impact_score,
+        str(c[1].last_updated or ""),
+        -int(c[0].get("priority", 0))))
+    seg, ev = candidates[0]
+    asset = repo.latest_video_asset(conn, ev.event_id, ev.current_revision)
+    return Program("story", seg["id"], ev.event_id, ev.current_revision,
+                   asset["path"], ev.title or ev.event_id, ev.impact_level)

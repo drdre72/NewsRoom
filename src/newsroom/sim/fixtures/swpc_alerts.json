@@ -1,0 +1,11 @@
+[
+ {"product_id": "K07A26111400",
+  "issue_datetime": "2026-11-07 14:00:00.000",
+  "message": "Space Weather Message Code: ALTK07\nSerial Number: 412\nIssue Time: 2026 Nov 07 1400 UTC\n\nALERT: Geomagnetic K-index of 7\nThreshold Reached: 2026 Nov 07 1359 UTC\nSynoptic Period: 1200-1500 UTC\n\nActive Warning: Yes\nNOAA Scale: G3 - Strong\n\nPotential Impacts: Area of impact primarily poleward of 50 degrees Geomagnetic Latitude."},
+ {"product_id": "K07A26111500",
+  "issue_datetime": "2026-11-07 15:00:00.000",
+  "message": "Space Weather Message Code: ALTK07\nSerial Number: 413\nIssue Time: 2026 Nov 07 1500 UTC\n\nALERT: Geomagnetic K-index of 7\nThreshold Reached: 2026 Nov 07 1458 UTC\nSynoptic Period: 1500-1800 UTC\n\nActive Warning: Yes\nNOAA Scale: G3 - Strong\n\nPotential Impacts: Area of impact primarily poleward of 50 degrees Geomagnetic Latitude."},
+ {"product_id": "WARK06A1",
+  "issue_datetime": "2026-11-07 15:30:00.000",
+  "message": "Space Weather Message Code: WARK06\nSerial Number: 88\nIssue Time: 2026 Nov 07 1530 UTC\n\nWARNING: Geomagnetic K-index of 6 expected\nValid From: 2026 Nov 07 1530 UTC\nValid To: 2026 Nov 08 0600 UTC\nWarning Condition: Onset\n\nNOAA Scale: G2 - Moderate"}
+]

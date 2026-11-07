@@ -135,6 +135,21 @@ class TestProgramSelection:
                      "/tmp/x.mp4", 40.0)
         assert prog.pick_next(conn, settings) is None
 
+    def test_severity_beats_segment_priority(self, conn, settings):
+        # A BREAKING story in a low-priority segment beats a NORMAL story
+        # in a high-priority segment — the rundown is severity-first.
+        _seed_event(conn, "eq:normal", "earthquake", "NORMAL", 0.3, 0.95)
+        _seed_event(conn, "wf:breaking", "wildfire", "BREAKING", 0.7, 0.95)
+        p = prog.pick_next(conn, settings)
+        assert p and p.event_id == "wf:breaking"
+
+    def test_top_story_airs_under_headlines(self, conn, settings):
+        # Same event is a candidate for both `headlines` (any type) and its
+        # typed segment — higher-priority segment wins the label.
+        _seed_event(conn, "eq:big", "earthquake", "BREAKING", 0.7, 0.95)
+        p = prog.pick_next(conn, settings)
+        assert p and p.rundown_id == "headlines"
+
 
 class TestPlistRendering:
     def test_templates_render_valid_plist(self):

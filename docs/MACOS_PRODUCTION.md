@@ -123,6 +123,21 @@ AND `publishing.automatic: true`. All three are off by default (§66, §77).
   volcano, severe storm, flood, landslide, snow, drought, sea/lake ice,
   temperature extremes (`poll_every_seconds: 3600`). Earthquake and
   non-newsworthy categories are skipped — USGS/NWS own those domains.
+- **GDACS** RSS — UN/EU global disaster alerts (earthquake, cyclone,
+  flood, volcano, drought, wildfire, tsunami) with Red/Orange/Green alert
+  levels + population exposure (`poll_every_seconds: 1800`). GDACS
+  earthquakes FUSE with USGS events for corroboration.
+- **NOAA SWPC** `alerts.json` — space weather: geomagnetic storms (G1-G5),
+  radiation storms (S1-S5), radio blackouts (R1-R5), K-index crossings
+  (`poll_every_seconds: 900`). Repeated serials of the same message code
+  revise one event; new thresholds escalate to new events.
+
+### Rundown ordering
+
+Air order is severity-first across all segments: FLASH cuts into live
+programming, BREAKING preempts at boundaries, and the rundown picks the
+highest-level + highest-score eligible event regardless of which desk it
+belongs to. Segment priority only decides the label a story airs under.
 
 ### On-air voice
 

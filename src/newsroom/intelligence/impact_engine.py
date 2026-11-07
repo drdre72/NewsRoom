@@ -58,13 +58,15 @@ def _weather_alert_score(snapshot: dict[str, Any], cfg: dict) -> float:
 
 
 def _generic_score(snapshot: dict[str, Any], cfg: dict) -> float:
-    """Severity + category scorer for EONET-style families (§13). Configured
-    in thresholds.yaml per event_type; closed events lose their penalty."""
+    """Severity + mapped-field scorer for EONET/GDACS/SWPC families (§13).
+    Configured in thresholds.yaml per event_type; closed events lose their
+    penalty."""
     sev = cfg.get("severity", {})
     total = sev.get("weight", 0) * _norm(
         snapshot.get("severity"), sev.get("min", 0), sev.get("max", 1))
-    total += _mapped(snapshot, "category", cfg.get("category", {}),
-                     default=0.3)
+    for map_field in ("category", "alert_level"):
+        total += _mapped(snapshot, map_field, cfg.get(map_field, {}),
+                         default=0.3)
     if snapshot.get("closed"):
         total -= float(cfg.get("closed_penalty", 0.3))
     return min(1.0, max(0.0, total))

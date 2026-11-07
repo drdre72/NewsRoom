@@ -27,6 +27,9 @@ LEDGER_FIELDS = (
     # EONET natural events
     "category", "category_title", "closed", "closed_at", "magnitude_unit",
     "source_url", "eonet_link",
+    # GDACS + SWPC
+    "alert_level", "gdacs_type", "country", "population",
+    "swpc_code", "noaa_scale", "product_id",
 )
 
 

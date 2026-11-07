@@ -31,9 +31,20 @@ sources:
   gdacs:
     kind: gdacs
     authority: 0.9
-    enabled: false
+    enabled: true
     feeds:
       rss: https://www.gdacs.org/xml/rss.xml
+    poll_feed: rss
+    poll_every_seconds: 1800
+
+  swpc:
+    kind: noaa_swpc
+    authority: 0.95
+    enabled: true
+    feeds:
+      alerts: https://services.swpc.noaa.gov/products/alerts.json
+    poll_feed: alerts
+    poll_every_seconds: 900
 
 # Cross-source event fusion (§16)
 fusion:

@@ -245,6 +245,10 @@ def _eonet_template(ctx: FactContext, settings: Settings) -> Script:
         add(f"The latest measured extent is {sev.value_display}{suffix}.",
             "severity", *(["magnitude_unit"] if unit else []))
 
+    alert_level = f.get("alert_level")
+    if alert_level:
+        add(f"The alert level is {alert_level.value_display}.", "alert_level")
+
     when = f.get("occurred_at")
     if when:
         add(f"The latest position was reported at {when.value_display}.",

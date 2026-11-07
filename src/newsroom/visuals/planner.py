@@ -32,9 +32,11 @@ _METRICS_BY_TYPE = {
 _METRICS_GENERIC = (("title", "EVENT"), ("occurred_at", "TIME UTC"),
                     ("status", "STATUS"))
 
-# EONET families share one metric grid — extent + unit, class, time, status.
+# EONET/GDACS/SWPC families share one metric grid — extent + unit, class,
+# time, status.
 _EONET_TYPES = {"wildfire", "volcano", "severe_storm", "flood", "landslide",
-                "snow", "drought", "sea_ice", "temp_extreme"}
+                "snow", "drought", "sea_ice", "temp_extreme",
+                "tropical_cyclone", "tsunami_warning", "space_weather"}
 _METRICS_EONET = (("severity", "EXTENT"), ("magnitude_unit", "UNIT"),
                   ("category_title", "CLASS"), ("occurred_at", "TIME UTC"),
                   ("status", "STATUS"))

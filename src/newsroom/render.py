@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 import subprocess
 from pathlib import Path
@@ -84,7 +85,8 @@ def render_short(
     if not event:
         raise ValueError(f"unknown event {event_id}")
     rev = event.current_revision
-    work = cache_dir() / "renders" / f"{event_id.replace(':', '_')}_r{rev}"
+    safe_id = re.sub(r"[^A-Za-z0-9_.-]", "_", event_id)
+    work = cache_dir() / "renders" / f"{safe_id}_r{rev}"
     shots_dir = work / "shots"
     audio_dir = work / "audio"
     shots_dir.mkdir(parents=True, exist_ok=True)
@@ -233,7 +235,7 @@ def render_short(
         "platform": "macos-arm64",
         "dry_run": dry_run,
     }
-    mpath = output_dir() / "manifests" / f"{event_id.replace(':', '_')}_r{rev}.json"
+    mpath = output_dir() / "manifests" / f"{safe_id}_r{rev}.json"
     mpath.write_text(json.dumps(manifest, indent=2))
     for kind, p in (("video", out), ("manifest", mpath), ("caption", ass),
                     ("audio", narration)):

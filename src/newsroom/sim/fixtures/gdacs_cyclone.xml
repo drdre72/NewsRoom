@@ -1,0 +1,16 @@
+<item xmlns:geo="http://www.w3.org/2003/01/geo/wgs84_pos#" xmlns:gdacs="http://www.gdacs.org">
+  <title>Red tropical cyclone alert for TYPHOON-26 in Philippines</title>
+  <description>From 06/11/2026 to 09/11/2026, a Tropical Cyclone (maximum wind speed of 150 km/h) was forecast to strike.</description>
+  <link>https://www.gdacs.org/report.aspx?eventtype=TC&amp;eventid=1002999</link>
+  <pubDate>Fri, 06 Nov 2026 14:00:00 GMT</pubDate>
+  <gdacs:eventtype>TC</gdacs:eventtype>
+  <gdacs:alertlevel>Red</gdacs:alertlevel>
+  <gdacs:eventid>1002999</gdacs:eventid>
+  <gdacs:episodeid>4</gdacs:episodeid>
+  <gdacs:severity unit="km/h" value="150">150 km/h</gdacs:severity>
+  <gdacs:population>3500000</gdacs:population>
+  <gdacs:country>Philippines</gdacs:country>
+  <gdacs:fromdate>2026-11-06T14:00:00Z</gdacs:fromdate>
+  <gdacs:todate>2026-11-09T14:00:00Z</gdacs:todate>
+  <geo:Point><geo:lat>14.2</geo:lat><geo:long>122.5</geo:long></geo:Point>
+</item>
