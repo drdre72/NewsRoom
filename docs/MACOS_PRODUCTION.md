@@ -149,6 +149,16 @@ programming, BREAKING preempts at boundaries, and the rundown picks the
 highest-level + highest-score eligible event regardless of which desk it
 belongs to. Segment priority only decides the label a story airs under.
 
+When the rundown is empty the Director runs a replay rotation instead of
+idling on the standby slate: stories whose current revision already
+premiered re-air least-recently-aired first (`replay.enabled` in
+`config/broadcast.yaml`). Replays are filler — any interrupt or fresh
+rundown item preempts them mid-air, replay airings never count toward
+segment cadence, and the frame shows a REPLAY badge rather than LIVE so
+stale content is never presented as live. The standby slate only runs
+when nothing airable exists, and it yields within a poll interval once a
+render completes rather than waiting out its duration.
+
 ### On-air voice
 
 Narration is locked to Kokoro MLX `af_heart`

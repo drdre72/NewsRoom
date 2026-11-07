@@ -143,6 +143,57 @@ class TestProgramSelection:
         p = prog.pick_next(conn, settings)
         assert p and p.event_id == "wf:breaking"
 
+    def test_replay_picks_least_recently_aired(self, conn, settings):
+        # Rotation is LRU: the stalest airing replays first, and a replay
+        # sends its event to the back of the queue (no back-to-back repeats).
+        _seed_event(conn, "eq:a", "earthquake", "UPDATE", 0.6, 0.95)
+        _seed_event(conn, "eq:b", "earthquake", "NORMAL", 0.3, 0.95)
+        for air_id, ev, ts in (("a1", "eq:a", "2020-01-01T00:00:00.000Z"),
+                               ("a2", "eq:b", "2020-01-02T00:00:00.000Z")):
+            repo.log_air(conn, air_id, "story", ev, 1, "headlines",
+                         "/tmp/x.mp4", 40.0)
+            conn.execute("UPDATE air_log SET started_at=? WHERE air_id=?",
+                         (ts, air_id))
+        p = prog.pick_replay(conn, settings)
+        assert p and p.event_id == "eq:a" and p.kind == "replay"
+        repo.log_air(conn, "a3", "replay", "eq:a", 1, "replay",
+                     "/tmp/x.mp4", 40.0)
+        assert prog.pick_replay(conn, settings).event_id == "eq:b"
+
+    def test_replay_requires_aired_current_revision(self, conn, settings):
+        # rev1 aired, rev2 rendered-but-unaired: the event leaves the replay
+        # pool until rev2 premieres through the fresh path — a replay must
+        # never steal a first airing.
+        _seed_event(conn, "eq:a", "earthquake", "UPDATE", 0.6, 0.95)
+        repo.log_air(conn, "a1", "story", "eq:a", 1, "headlines",
+                     "/tmp/x.mp4", 40.0)
+        assert prog.pick_replay(conn, settings)
+        ev = repo.get_event(conn, "eq:a")
+        ev.current_revision = 2
+        repo.upsert_event(conn, ev)
+        repo.insert_asset(conn, repo.new_id("asset"), "video",
+                          "/tmp/eq:a_r2.mp4", "hash", "eq:a", 2, {})
+        assert prog.pick_replay(conn, settings) is None
+
+    def test_replay_never_aired_no_pick(self, conn, settings):
+        _seed_event(conn, "eq:a", "earthquake", "UPDATE", 0.6, 0.95)
+        assert prog.pick_replay(conn, settings) is None
+
+    def test_replay_air_does_not_block_fresh_rundown(self, conn, settings):
+        # A replay air is filler — it must not consume the event's cadence
+        # window and suppress fresh programming.
+        _seed_event(conn, "eq:a", "earthquake", "UPDATE", 0.6, 0.95)
+        repo.log_air(conn, "a1", "replay", "eq:a", 1, "replay",
+                     "/tmp/x.mp4", 40.0)
+        p = prog.pick_next(conn, settings)
+        assert p and p.event_id == "eq:a"
+
+    def test_replay_respects_confidence_floor(self, conn, settings):
+        _seed_event(conn, "eq:weak", "earthquake", "NORMAL", 0.3, 0.50)
+        repo.log_air(conn, "a1", "story", "eq:weak", 1, "headlines",
+                     "/tmp/x.mp4", 40.0)
+        assert prog.pick_replay(conn, settings) is None
+
     def test_top_story_airs_under_headlines(self, conn, settings):
         # Same event is a candidate for both `headlines` (any type) and its
         # typed segment — higher-priority segment wins the label.

@@ -41,6 +41,7 @@ class BroadcastDirector:
         self.state_file = self.playout.dir / "state.json"
         self._caffeinate: subprocess.Popen | None = None
         self._airing: tuple[str | None, int | None] = (None, None)
+        self._airing_replay = False
 
     # -- lifecycle ---------------------------------------------------------
     def install_signal_handlers(self) -> None:
@@ -73,6 +74,10 @@ class BroadcastDirector:
         program = prog.pick_next(self.conn, self.settings)
         if program:
             self._air(program)
+            return
+        replay = prog.pick_replay(self.conn, self.settings)
+        if replay:
+            self._air(replay)
         else:
             self._standby()
 
@@ -89,6 +94,7 @@ class BroadcastDirector:
                   revision=program.revision, impact=program.level)
         t0 = time.monotonic()
         self._airing = (program.event_id, program.revision)
+        self._airing_replay = program.kind == "replay"
         frame = self._program_frame(program)
         self.playout.air_video(Path(program.asset_path), frame=frame)
         rc, err = self.playout.wait(stop_check=self._should_cut)
@@ -96,6 +102,7 @@ class BroadcastDirector:
         interrupted = self._interrupt_now
         self._interrupt_now = False
         self._airing = (None, None)
+        self._airing_replay = False
         if rc != 0 and not interrupted and not self._stop:
             log_event(log, 40, "playout encode failed", error=err)
             self._set_state(BroadcastState.DEGRADED,
@@ -125,8 +132,9 @@ class BroadcastDirector:
                 detail_lines=[
                     f"revision {program.revision}" if program.revision else "",
                     (ev.event_type.replace("_", " ") if ev else "")],
-                ticker="monitoring USGS · NWS · EONET — "
+                ticker="monitoring authoritative feeds — "
                        "facts verified against the fact ledger",
+                live=program.kind != "replay",
             )
             return frame
         except Exception as exc:  # noqa: BLE001 — frame is chrome, not content
@@ -135,25 +143,37 @@ class BroadcastDirector:
             return None
 
     def _should_cut(self) -> bool:
-        """Mid-program interrupt: only a *different* FLASH revision cuts a
-        story in progress (§33). The airing event can't interrupt itself —
-        it isn't in air_log until its air completes."""
+        """Mid-program preemption (§33): only a *different* FLASH revision
+        cuts a story in progress; a replay is filler and yields to any fresh
+        programming. The airing event can't interrupt itself — it isn't in
+        air_log until its air completes."""
         if self._stop:
             return True
         if self._interrupt_now:
             return True
         interrupt = prog.pick_interrupt(self.conn, self.settings)
-        if (interrupt and interrupt.level == "FLASH"
-                and (interrupt.event_id, interrupt.revision) != self._airing):
+        if (interrupt
+                and (interrupt.event_id, interrupt.revision) != self._airing
+                and (interrupt.level == "FLASH" or self._airing_replay)):
             self._interrupt_now = True
-            log_event(log, 30, "FLASH interrupt — cutting program",
-                      event_id=interrupt.event_id)
+            log_event(log, 30, f"{interrupt.level} interrupt — "
+                      "cutting program", event_id=interrupt.event_id)
             return True
+        # Replays are filler: any fresh rundown item preempts mid-air.
+        # The same event/revision finishing its replay is exempt — cutting
+        # it just to re-air identical content as 'story' gains nothing.
+        if self._airing_replay:
+            nxt = prog.pick_next(self.conn, self.settings)
+            if nxt and (nxt.event_id, nxt.revision) != self._airing:
+                self._interrupt_now = True
+                log_event(log, 20, "fresh rundown item preempts replay",
+                          event_id=nxt.event_id)
+                return True
         return False
 
     def _standby(self) -> None:
         standby_s = float(self.settings.get(
-            "broadcast.playout.standby_seconds", 20))
+            "playout.standby_seconds", 20))
         p = self.settings.get("playout", {}) or {}
         slate = cache_dir() / "slate.png"
         render_slate(slate, int(p.get("width", 1920)), int(p.get("height", 1080)))
@@ -161,10 +181,14 @@ class BroadcastDirector:
                         "standby — monitoring sources", kind="standby")
         t0 = time.monotonic()
         self.playout.air_slate(slate, standby_s)
-        # standby yields to *any* interrupt, not just FLASH
+        # standby yields to *anything* ready to air — a completed render
+        # cuts the slate short within a poll interval, not after the full
+        # slate duration
         def check():
-            return self._stop or bool(
-                prog.pick_interrupt(self.conn, self.settings))
+            return (self._stop
+                    or bool(prog.pick_interrupt(self.conn, self.settings))
+                    or bool(prog.pick_next(self.conn, self.settings))
+                    or bool(prog.pick_replay(self.conn, self.settings)))
         rc, err = self.playout.wait(stop_check=check)
         if rc == 0:
             repo.log_air(self.conn, repo.new_id("air"), "standby",

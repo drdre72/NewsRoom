@@ -33,6 +33,14 @@ auto_render:
   min_impact: UPDATE
   min_confidence: 0.70
 
+# Replay rotation (§31): when the rundown is empty, re-air stories whose
+# current revision already premiered, least-recently-aired first, instead of
+# idling on the standby slate. Replays are filler — any interrupt or fresh
+# rundown item preempts them mid-air, and replay airings never count toward
+# segment cadence. The slate only runs when nothing airable exists at all.
+replay:
+  enabled: true
+
 playout:
   width: 1920
   height: 1080

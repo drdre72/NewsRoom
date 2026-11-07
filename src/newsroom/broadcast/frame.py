@@ -39,18 +39,22 @@ def _wrap(draw, text: str, font, max_w: int) -> list[str]:
 def render_frame(out: Path, width: int, height: int, *,
                  title: str, level: str = "NORMAL",
                  source_line: str = "", ticker: str = "",
-                 detail_lines: list[str] | None = None) -> Path:
+                 detail_lines: list[str] | None = None,
+                 live: bool = True) -> Path:
     from PIL import Image, ImageDraw
     img = Image.new("RGB", (width, height), PALETTE["bg"])
     draw = ImageDraw.Draw(img)
 
     # -- header --------------------------------------------------------
+    # live=False → REPLAY badges in calm accent: filler never wears live-red.
+    badge = "LIVE" if live else "REPLAY"
+    badge_fill = PALETTE["red"] if live else PALETTE["accent"]
     draw.rectangle([0, 0, width, 88], fill=PALETTE["bg2"])
     chip = _font(_FONT_CANDIDATES, 40)
-    live_w = draw.textbbox((0, 0), "LIVE", font=chip)[2]
+    live_w = draw.textbbox((0, 0), badge, font=chip)[2]
     draw.rounded_rectangle([40, 20, 40 + live_w + 40, 68], radius=10,
-                           fill=PALETTE["red"])
-    draw.text((60, 28), "LIVE", font=chip, fill=(255, 255, 255))
+                           fill=badge_fill)
+    draw.text((60, 28), badge, font=chip, fill=(255, 255, 255))
     draw.text((width - 40, 30), "NEWSROOM", font=_font(_MONO_CANDIDATES, 36),
               fill=PALETTE["muted"], anchor="ra")
     story_font = _font(_FONT_CANDIDATES, 34)
@@ -64,8 +68,11 @@ def render_frame(out: Path, width: int, height: int, *,
     f_mid = _font(_FONT_CANDIDATES, 38)
     lx, ly = 56, 200
     draw.text((lx, ly), "NEWSROOM", font=f_mono, fill=PALETTE["muted"])
-    draw.text((lx, ly + 44), "LIVE", font=_font(_FONT_CANDIDATES, 96),
-              fill=PALETTE["red"])
+    big = badge
+    big_font = _font(_FONT_CANDIDATES, 96)
+    if draw.textbbox((0, 0), big, font=big_font)[2] > 520:
+        big_font = _font(_FONT_CANDIDATES, 72)
+    draw.text((lx, ly + 44), big, font=big_font, fill=badge_fill)
     draw.text((lx, ly + 160), "AUTONOMOUS", font=f_mid, fill=PALETTE["text"])
     draw.text((lx, ly + 210), "CRISIS DESK", font=f_mid, fill=PALETTE["text"])
     ly += 330

@@ -58,9 +58,11 @@ def _eligible_events(conn: sqlite3.Connection, settings: Settings,
             if not repo.latest_video_asset(
                     conn, ev.event_id, ev.current_revision):
                 continue
-            # per-event air cadence: don't repeat a story inside the window
+            # per-event air cadence: don't repeat a story inside the window.
+            # Replay airs are filler — they never count toward the cadence.
             last = conn.execute(
                 "SELECT MAX(started_at) FROM air_log WHERE event_id=?"
+                " AND kind != 'replay'"
                 " AND started_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now', ?)",
                 (ev.event_id, f"-{max_air_s} seconds"),
             ).fetchone()[0]
@@ -128,3 +130,33 @@ def pick_next(conn: sqlite3.Connection, settings: Settings) -> Program | None:
     asset = repo.latest_video_asset(conn, ev.event_id, ev.current_revision)
     return Program("story", seg["id"], ev.event_id, ev.current_revision,
                    asset["path"], ev.title or ev.event_id, ev.impact_level)
+
+
+def pick_replay(conn: sqlite3.Connection, settings: Settings) -> Program | None:
+    """Filler rotation for an empty rundown (§31): re-air stories whose
+    *current* revision already premiered, least-recently-aired first so the
+    rotation is a fair round-robin. The current-revision rule keeps replays
+    from stealing a premiere — a fresh revision that lands while its segment
+    is in cadence stays the fresh path's job, and the event only re-enters
+    this pool once that revision has properly aired."""
+    if settings.get("replay.enabled", True) is False:
+        return None
+    min_conf = float(settings.get("auto_render.min_confidence", 0.70))
+    rows = conn.execute(
+        "SELECT a.event_id, MAX(a.started_at) AS last_air FROM air_log a"
+        " JOIN events e ON e.event_id = a.event_id"
+        " AND e.current_revision = a.revision"
+        " GROUP BY a.event_id ORDER BY last_air ASC",
+    ).fetchall()
+    for row in rows:
+        ev = repo.get_event(conn, row["event_id"])
+        if not ev or ev.confidence_score < min_conf:
+            continue
+        asset = repo.latest_video_asset(conn, ev.event_id,
+                                        ev.current_revision)
+        if not asset:
+            continue
+        return Program("replay", "replay", ev.event_id, ev.current_revision,
+                       asset["path"], ev.title or ev.event_id,
+                       ev.impact_level)
+    return None
