@@ -137,6 +137,27 @@ impact:
                           "10-year treasury yield": 0.5,
                           "avg hourly earnings": 0.45}}
 
+  # FEMA declarations — severity_norm = declaration class (DR>EM>FM),
+  # category = incident type. A major-disaster hurricane declaration
+  # legitimately reaches BREAKING.
+  disaster_declaration:
+    severity:   {weight: 0.55, min: 0, max: 1}        # reads severity_norm
+    category:   {weight: 0.30, default: 0.45,
+                 values: {hurricane: 0.9, typhoon: 0.9, tsunami: 1.0,
+                          earthquake: 0.9, tornado: 0.85,
+                          "severe storm": 0.7, flood: 0.7,
+                          "coastal storm": 0.65, fire: 0.6,
+                          "straight-line winds": 0.5, "winter storm": 0.5,
+                          snowstorm: 0.5, "mud/landslide": 0.55}}
+
+  # CISA KEV — severity_norm = exploitation severity + ransomware + imminent
+  # deadline; category = whether a ransomware campaign is known to use it.
+  cyber_advisory:
+    severity:   {weight: 0.6, min: 0, max: 1}         # reads severity_norm
+    category:   {weight: 0.3, default: 0.5,
+                 values: {"known exploited": 0.85,
+                          "actively exploited": 0.6}}
+
   levels:            # score -> level (first match wins, top-down)
     FLASH: 0.85
     BREAKING: 0.60
@@ -155,6 +176,9 @@ confidence:
     fred: 0.95         # US govt statistics
     bls: 0.95
     gdelt: 0.60        # media aggregation — corroboration, not authority
+    eia: 0.95          # US govt statistics
+    fema: 0.95         # US govt declarations
+    cisa_kev: 0.90     # US govt cyber authority
     default: 0.50
   reviewed_bonus: 0.05        # source marked event "reviewed"
   corroboration_bonus: 0.05   # per extra corroborating source, max +0.10

@@ -115,6 +115,26 @@ sources:
       PET.WDISTUS1.W: {label: "US Distillate Stocks", units: "thousand barrels", move_scale: 4.0}
       NG.NW2_EPG0_SWO_R48_BCF.W: {label: "US Natural Gas Storage (L48)", units: "Bcf", move_scale: 8.0}
 
+  fema:
+    kind: fema
+    authority: 0.95
+    enabled: true
+    poll_every_seconds: 3600         # declarations are rare
+    top: 60                          # recent designated-area rows to group
+    feeds:
+      declarations: https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries
+    poll_feed: declarations
+
+  cisa:
+    kind: cisa_kev
+    authority: 0.90
+    enabled: true
+    poll_every_seconds: 3600
+    lookback_days: 2                 # only new additions become events
+    feeds:
+      kev: https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json
+    poll_feed: kev
+
 # Cross-source event fusion (§16)
 fusion:
   time_window_seconds: 300

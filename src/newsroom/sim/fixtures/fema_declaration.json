@@ -1,0 +1,11 @@
+{"declaration": "DR-4955-FL", "areas": ["Bay (County)", "Gulf (County)"],
+ "femaDeclarationString": "DR-4955-FL", "disasterNumber": 4955,
+ "state": "FL", "declarationType": "DR",
+ "declarationDate": "2026-10-27T00:00:00.000Z", "fyDeclared": 2027,
+ "incidentType": "Hurricane", "declarationTitle": "HURRICANE ISAIAS",
+ "ihProgramDeclared": true, "iaProgramDeclared": false,
+ "paProgramDeclared": true, "hmProgramDeclared": false,
+ "incidentBeginDate": "2026-10-06T00:00:00.000Z",
+ "incidentEndDate": "2026-10-12T00:00:00.000Z",
+ "designatedArea": "Bay (County)", "incidentId": "2026100601",
+ "region": 4}

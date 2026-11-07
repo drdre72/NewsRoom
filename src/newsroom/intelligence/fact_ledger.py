@@ -38,9 +38,15 @@ LEDGER_FIELDS = (
     "action_country", "is_root",
     # §15 high-risk — ledgerable so claims can cite them explicitly
     "fatalities", "casualties", "injuries",
-    # FRED + BLS economic indicators
+    # FRED + BLS + EIA economic indicators
     "series_id", "series_label", "units", "value_date", "previous_value",
     "delta", "delta_pct", "period_name",
+    # FEMA disaster declarations
+    "declaration_id", "declaration_type", "declaration_label", "state",
+    "incident_type", "areas", "area_count", "ih_program", "pa_program",
+    # CISA known-exploited-vulnerabilities advisories
+    "cve_id", "vendor", "product", "vuln_name", "short_description",
+    "due_date", "ransomware_use",
 )
 
 

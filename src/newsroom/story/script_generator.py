@@ -169,6 +169,10 @@ def _script_from_template(
         return _earthquake_template(ctx, settings)
     if ctx.event_type == "economic_indicator":
         return _econ_template(ctx, settings)
+    if ctx.event_type == "disaster_declaration":
+        return _fema_template(ctx, settings)
+    if ctx.event_type == "cyber_advisory":
+        return _cisa_template(ctx, settings)
     return _eonet_template(ctx, settings)
 
 
@@ -324,6 +328,84 @@ def _econ_template(ctx: FactContext, settings: Settings) -> Script:
 
     headline = (f"{label.value_display}" if label else
                 "Economic data bulletin")
+    return Script(headline=headline, segments=segs, generator="template",
+                  event_id=ctx.event_id, revision=ctx.revision)
+
+
+def _fema_template(ctx: FactContext, settings: Settings) -> Script:
+    """FEMA declarations — the declaration class, the state, the covered
+    counties, and the incident behind it."""
+    f, segs, add = _template_parts(ctx, settings)
+
+    label = f.get("declaration_label")
+    state = f.get("state")
+    incident = f.get("incident_type")
+    if label and state:
+        add(f"FEMA has issued a {label.value_display.lower()} for "
+            f"{state.value_display}.", "declaration_label", "state")
+    elif label:
+        add(f"FEMA has issued a {label.value_display.lower()}.",
+            "declaration_label")
+
+    if incident:
+        add(f"The declaration follows {incident.value_display.lower()} "
+            f"conditions in the affected area.", "incident_type")
+
+    areas = f.get("areas")
+    count = f.get("area_count")
+    if areas:
+        add(f"Designated areas: {areas.value_display}.", "areas")
+    elif count:
+        add(f"The declaration covers {count.value_display} designated "
+            f"areas.", "area_count")
+
+    when = f.get("occurred_at")
+    if when:
+        add(f"The incident began {when.value_display}.", "occurred_at")
+
+    _revision_segments(ctx, add)
+    _developing_close(add)
+
+    headline = (f"{state.value_display} {incident.value_display.lower()} "
+                "declaration" if state and incident else
+                (label.value_display if label else "FEMA declaration"))
+    return Script(headline=headline, segments=segs, generator="template",
+                  event_id=ctx.event_id, revision=ctx.revision)
+
+
+def _cisa_template(ctx: FactContext, settings: Settings) -> Script:
+    """CISA KEV additions — the CVE, what's affected, the federal deadline.
+    Careful phrasing: 'exploited in the wild', never unattributed claims."""
+    f, segs, add = _template_parts(ctx, settings)
+
+    cve = f.get("cve_id")
+    name = f.get("vuln_name")
+    if cve and name:
+        add(f"CISA has added {cve.value_display} to the Known Exploited "
+            f"Vulnerabilities catalog: {name.value_display}.",
+            "cve_id", "vuln_name")
+
+    vendor = f.get("vendor")
+    product = f.get("product")
+    if vendor and product:
+        add(f"The affected product is {vendor.value_display} "
+            f"{product.value_display}.", "vendor", "product")
+
+    due = f.get("due_date")
+    if due:
+        add(f"Federal agencies are directed to remediate by "
+            f"{due.value_display}.", "due_date")
+
+    ransom = f.get("ransomware_use")
+    if ransom and ransom.value == "Known":
+        add("CISA reports this vulnerability is used in known ransomware "
+            "campaigns.", "ransomware_use")
+
+    _revision_segments(ctx, add)
+    _developing_close(add)
+
+    headline = (f"{cve.value_display} actively exploited" if cve
+                else "Cybersecurity advisory")
     return Script(headline=headline, segments=segs, generator="template",
                   event_id=ctx.event_id, revision=ctx.revision)
 

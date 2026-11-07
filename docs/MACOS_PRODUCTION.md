@@ -141,6 +141,20 @@ AND `publishing.automatic: true`. All three are off by default (§66, §77).
   (`poll_every_seconds: 1800`, ~10MB zip). Shares `conflict_event` with
   ACLED so the two fuse and corroborate; fatality claims cite the §15
   `fatalities` fact explicitly.
+- **FRED** `/fred/series/observations` — macro indicators (UNRATE,
+  CPIAUCSL, PAYEMS, FEDFUNDS, GS10) as `economic_indicator` events; each
+  new print revises the series event (`FRED_API_KEY` required).
+- **BLS** v2 `/publicAPI/v2/timeseries/data/` — labor prints as
+  `economic_indicator` (unkeyed at 25 req/day; `BLS_API_KEY` optional).
+- **EIA** `/v2/seriesid/` — weekly energy inventories (crude excl-SPR,
+  gasoline, distillate, L48 gas storage) as `economic_indicator`
+  (`EIA_API_KEY` required). Surprise severity = |pct change|/move_scale.
+- **FEMA** OpenFEMA `DisasterDeclarationsSummaries` — US disaster
+  declarations (DR/EM/FM) as `disaster_declaration` events, one event per
+  femaDeclarationString with designated counties merged (no key).
+- **CISA KEV** known-exploited-vulnerabilities.json — actively exploited
+  CVEs as `cyber_advisory` events; `lookback_days: 2` means only new
+  catalog additions emit (no key).
 
 ### Rundown ordering
 

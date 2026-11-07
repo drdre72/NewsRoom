@@ -24,6 +24,7 @@ SEGMENT_TYPES = {
                       "temp_extreme", "tropical_cyclone", "tsunami_warning",
                       "conflict_event", "protest"],
     "space_weather": ["space_weather"],
+    "us_desk": ["disaster_declaration", "cyber_advisory"],
     "economy": ["economic_indicator"],
     "explainer": ["economic_indicator"],
 }

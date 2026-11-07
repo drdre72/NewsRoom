@@ -1,0 +1,10 @@
+{"cveID": "CVE-2026-19868", "vendorProject": "SonicWall",
+ "product": "SonicOS SSLVPN",
+ "vulnerabilityName": "SonicWall SonicOS SSLVPN Use of Single-factor Authentication Vulnerability",
+ "dateAdded": "2026-11-06",
+ "shortDescription": "SonicWall SonicOS SSLVPN contains a use of single-factor authentication vulnerability that may allow a user with valid credentials for an alternate authentication method to bypass SAML authentication controls.",
+ "requiredAction": "Apply mitigations in accordance with vendor instructions.",
+ "dueDate": "2026-11-20",
+ "knownRansomwareCampaignUse": "Unknown", "forensicTriage": "No",
+ "notes": "https://psirt.global.sonicwall.com/vuln-detail/SNWLID-2026-0014",
+ "cwes": ["CWE-308"]}

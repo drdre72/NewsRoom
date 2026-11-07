@@ -7,6 +7,7 @@ rundown:
     - {id: earthquakes,      title: "Earthquake Activity", priority: 50, max_air_every_min: 20}
     - {id: international,    title: "International",      priority: 30, max_air_every_min: 60}
     - {id: space_weather,    title: "Space Weather",      priority: 20, max_air_every_min: 90}
+    - {id: us_desk,          title: "U.S. Desk",          priority: 40, max_air_every_min: 45}
     - {id: economy,          title: "Economy",            priority: 15, max_air_every_min: 60}
     - {id: explainer,        title: "Explainer",          priority: 10, max_air_every_min: 120}
 

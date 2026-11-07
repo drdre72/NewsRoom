@@ -9,6 +9,8 @@ from .gdelt import GdeltAdapter
 from .fred import FredAdapter
 from .bls import BlsAdapter
 from .eia import EiaAdapter
+from .fema import FemaAdapter
+from .cisa import CisaAdapter
 
 _REGISTRY = {
     "usgs_geojson": UsgsAdapter,
@@ -21,6 +23,8 @@ _REGISTRY = {
     "fred": FredAdapter,
     "bls": BlsAdapter,
     "eia": EiaAdapter,
+    "fema": FemaAdapter,
+    "cisa_kev": CisaAdapter,
 }
 
 
