@@ -69,6 +69,37 @@ sources:
     min_num_sources: 2
     max_items: 300
 
+  fred:
+    kind: fred
+    authority: 0.95
+    enabled: true
+    requires_env: [FRED_API_KEY]   # free at fredaccount.stlouisfed.org/apikeys
+    poll_every_seconds: 21600      # macro data releases are daily/monthly
+    feeds:
+      observations: https://api.stlouisfed.org/fred/series/observations
+    poll_feed: observations
+    series:                      # id -> label/units/surprise scale
+      UNRATE:  {label: "Unemployment Rate", units: "Percent", move_scale: 5.0}
+      CPIAUCSL: {label: "CPI-U All Items", units: "Index 1982-84=100", move_scale: 1.5}
+      PAYEMS:  {label: "Nonfarm Payrolls", units: "Thousands", move_scale: 1.0}
+      FEDFUNDS: {label: "Fed Funds Rate", units: "Percent", move_scale: 5.0}
+      GS10:    {label: "10-Year Treasury Yield", units: "Percent", move_scale: 4.0}
+
+  bls:
+    kind: bls
+    authority: 0.95
+    enabled: true
+    # works without a key (25 req/day); BLS_API_KEY raises limits
+    poll_every_seconds: 21600
+    feeds:
+      data: https://api.bls.gov/publicAPI/v2/timeseries/data/
+    poll_feed: data
+    series:
+      LNS14000000: {label: "Unemployment Rate", units: "Percent", move_scale: 5.0}
+      CES0000000001: {label: "Total Nonfarm Payrolls", units: "Thousands", move_scale: 1.0}
+      CUSR0000SA0: {label: "CPI-U (SA)", units: "Index 1982-84=100", move_scale: 1.5}
+      CES0500000003: {label: "Avg Hourly Earnings", units: "USD/hour", move_scale: 1.5}
+
 # Cross-source event fusion (§16)
 fusion:
   time_window_seconds: 300

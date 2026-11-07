@@ -22,6 +22,8 @@ from ..ingestion.adapters.gdacs import GdacsAdapter
 from ..ingestion.adapters.swpc import SwpcAdapter
 from ..ingestion.adapters.acled import AcledAdapter
 from ..ingestion.adapters.gdelt import GdeltAdapter
+from ..ingestion.adapters.fred import FredAdapter
+from ..ingestion.adapters.bls import BlsAdapter
 from ..logging import get_logger, log_event
 from ..pipeline import ingest_observation
 from ..storage import repositories as repo
@@ -33,7 +35,8 @@ SCENARIOS = Path(__file__).parent / "scenarios.yaml"
 
 _ADAPTERS = {"usgs": UsgsAdapter, "nws": NwsAdapter, "eonet": EonetAdapter,
              "gdacs": GdacsAdapter, "swpc": SwpcAdapter,
-             "acled": AcledAdapter, "gdelt": GdeltAdapter}
+             "acled": AcledAdapter, "gdelt": GdeltAdapter,
+             "fred": FredAdapter, "bls": BlsAdapter}
 
 
 def list_scenarios() -> dict:

@@ -38,6 +38,9 @@ LEDGER_FIELDS = (
     "action_country", "is_root",
     # §15 high-risk — ledgerable so claims can cite them explicitly
     "fatalities", "casualties", "injuries",
+    # FRED + BLS economic indicators
+    "series_id", "series_label", "units", "value_date", "previous_value",
+    "delta", "delta_pct", "period_name",
 )
 
 

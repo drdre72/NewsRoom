@@ -37,7 +37,7 @@ _METRICS_GENERIC = (("title", "EVENT"), ("occurred_at", "TIME UTC"),
 _EONET_TYPES = {"wildfire", "volcano", "severe_storm", "flood", "landslide",
                 "snow", "drought", "sea_ice", "temp_extreme",
                 "tropical_cyclone", "tsunami_warning", "space_weather",
-                "conflict_event", "protest"}
+                "conflict_event", "protest", "economic_indicator"}
 _METRICS_EONET = (("severity", "EXTENT"), ("magnitude_unit", "UNIT"),
                   ("category_title", "CLASS"), ("occurred_at", "TIME UTC"),
                   ("status", "STATUS"))

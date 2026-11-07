@@ -125,6 +125,18 @@ impact:
     category:   {weight: 0.3, default: 0.35,
                  values: {protests: 0.4, riots: 0.55}}
 
+  # FRED + BLS share economic_indicator — severity_norm = |change|/move_scale
+  # (adapter-computed), category = series label.
+  economic_indicator:
+    severity:   {weight: 0.5, min: 0, max: 1}           # reads severity_norm
+    category:   {weight: 0.35, default: 0.35,
+                 values: {"nonfarm payrolls": 0.8, "total nonfarm payrolls": 0.8,
+                          "cpi-u all items": 0.7, "cpi-u (sa)": 0.7,
+                          "unemployment rate": 0.7,
+                          "fed funds rate": 0.6,
+                          "10-year treasury yield": 0.5,
+                          "avg hourly earnings": 0.45}}
+
   levels:            # score -> level (first match wins, top-down)
     FLASH: 0.85
     BREAKING: 0.60
@@ -140,6 +152,8 @@ confidence:
     acled: 0.75        # curated but NGO — below govt feeds
     gdacs: 0.80
     eonet: 0.80
+    fred: 0.95         # US govt statistics
+    bls: 0.95
     gdelt: 0.60        # media aggregation — corroboration, not authority
     default: 0.50
   reviewed_bonus: 0.05        # source marked event "reviewed"

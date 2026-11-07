@@ -1,0 +1,5 @@
+{"seriesID": "CES0000000001", "data": [
+ {"year": "2026", "period": "M10", "periodName": "October", "latest": "true",
+  "value": "159,412", "footnotes": [],
+  "calculations": {"net_changes": {"1": "215", "3": "612", "6": "1240", "12": "2890"},
+                   "pct_changes": {"1": "0.14", "3": "0.39", "6": "0.78", "12": "1.85"}}}]}

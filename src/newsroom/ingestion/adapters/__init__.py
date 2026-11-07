@@ -6,6 +6,8 @@ from .gdacs import GdacsAdapter
 from .swpc import SwpcAdapter
 from .acled import AcledAdapter
 from .gdelt import GdeltAdapter
+from .fred import FredAdapter
+from .bls import BlsAdapter
 
 _REGISTRY = {
     "usgs_geojson": UsgsAdapter,
@@ -15,6 +17,8 @@ _REGISTRY = {
     "noaa_swpc": SwpcAdapter,
     "acled": AcledAdapter,
     "gdelt": GdeltAdapter,
+    "fred": FredAdapter,
+    "bls": BlsAdapter,
 }
 
 

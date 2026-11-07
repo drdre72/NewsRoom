@@ -1,0 +1,3 @@
+{"series_id": "CPIAUCSL", "observations": [
+ {"realtime_start": "2026-11-07", "realtime_end": "2026-11-07", "date": "2026-10-01", "value": "325.9"},
+ {"realtime_start": "2026-10-07", "realtime_end": "2026-11-07", "date": "2026-09-01", "value": "324.1"}]}
