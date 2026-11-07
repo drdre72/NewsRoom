@@ -89,4 +89,11 @@ class ServiceLoop:
                 raise RuntimeError(
                     f"render gate failed: {manifest['publication_gate']}")
             return
+        if job_type == JobType.LONGFORM_RENDER:
+            from .render import render_longform
+            manifest = render_longform(self.conn, self.settings, event_id)
+            if manifest["publication_gate"]["verdict"] != "pass":
+                raise RuntimeError(
+                    f"longform gate failed: {manifest['publication_gate']}")
+            return
         raise ValueError(f"unknown job type {job_type}")

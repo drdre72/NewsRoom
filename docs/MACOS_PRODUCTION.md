@@ -173,6 +173,20 @@ stale content is never presented as live. The standby slate only runs
 when nothing airable exists, and it yields within a poll interval once a
 render completes rather than waiting out its duration.
 
+### Long-form explainer
+
+`python main.py render-long <event_id>` produces a 1920×1080 horizontal
+multi-chapter explainer — the YouTube main-feed leg. `LONGFORM_RENDER` is
+a first-class job type (priority 70); the service loop drains it
+serially alongside shorts. The script is a deeper treatment of the same
+event: Overview → What We Know → Location → Timeline → How the Story
+Evolved → Source Corroboration → Impact Assessment → Background → What
+to Watch → Closing. Each chapter carries a YouTube chapter marker
+(`youtube_chapters` in the manifest) ready for paste into the video
+description. Background context about an event type (not the event
+itself) is exempt from the per-segment citation requirement — it makes
+no event-specific factual claim.
+
 ### On-air voice
 
 Narration is locked to Kokoro MLX `af_heart`

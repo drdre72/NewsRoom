@@ -111,6 +111,15 @@ def cmd_render(args) -> int:
     return 0 if manifest["publication_gate"]["verdict"] == "pass" else 1
 
 
+def cmd_render_longform(args) -> int:
+    from .render import render_longform
+    conn, settings = _conn_and_settings(args)
+    manifest = render_longform(conn, settings, args.event_id,
+                               dry_run=args.dry_run)
+    print(json.dumps(manifest, indent=2))
+    return 0 if manifest["publication_gate"]["verdict"] == "pass" else 1
+
+
 def cmd_events(args) -> int:
     from .storage import repositories as repo
     conn, _ = _conn_and_settings(args)
@@ -179,6 +188,8 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--poll", action="store_true")
     p_ren = sub.add_parser("render")
     p_ren.add_argument("event_id")
+    p_rlf = sub.add_parser("render-long")
+    p_rlf.add_argument("event_id")
     p_ev = sub.add_parser("events")
     p_ev.add_argument("--type", default=None)
     p_ev.add_argument("--limit", type=int, default=20)
@@ -198,7 +209,8 @@ def main(argv: list[str] | None = None) -> int:
     configure_logging()
     return {
         "doctor": cmd_doctor, "status": cmd_status, "simulate": cmd_simulate,
-        "run": cmd_run, "render": cmd_render, "events": cmd_events,
+        "run": cmd_run, "render": cmd_render,
+        "render-long": cmd_render_longform, "events": cmd_events,
         "story": cmd_story, "broadcast": cmd_broadcast,
         "preview": cmd_preview, "health": cmd_health,
         "services": cmd_services,

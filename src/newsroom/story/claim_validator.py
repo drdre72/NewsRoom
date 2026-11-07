@@ -38,6 +38,24 @@ def _extract_numbers(text: str) -> list[str]:
     return [m.group(0) for m in _NUM_RE.finditer(text)]
 
 
+# Background context about an event type (long-form explainer) makes no
+# event-specific factual claim — it explains the category ("Tropical
+# cyclones are rated by sustained wind speed"). These segments are
+# exempt from the per-segment citation requirement.
+_TYPE_BACKGROUND_MARKERS = (
+    "earthquakes occur", "national weather service issues",
+    "wildfires are tracked", "tropical cyclones are rated",
+    "space weather storms are rated", "conflict event data",
+    "economic indicators are released", "fema declarations authorize",
+    "known exploited vulnerabilities catalog", "the magnitude scale",
+)
+
+
+def _is_type_background(text: str) -> bool:
+    low = text.lower()
+    return any(m in low for m in _TYPE_BACKGROUND_MARKERS)
+
+
 def _num_key(token: str) -> float | None:
     try:
         return float(token)
@@ -85,8 +103,15 @@ def validate_script(
         bad = [fid for fid in seg.fact_ids if fid not in known]
         if bad:
             errors.append(f"segment {i}: cites unknown fact ids {bad}")
-        if not cited and "developing story" not in seg.text.lower():
-            errors.append(f"segment {i}: no valid fact citations")
+        if not cited and not any(
+                phrase in seg.text.lower()
+                for phrase in ("developing story", "will continue to monitor",
+                               "revisions will be reported")):
+            # Background context about an event type (not the event itself)
+            # is exempt too: "Tropical cyclones are rated by sustained wind
+            # speed" makes no event-specific claim needing citation.
+            if not _is_type_background(seg.text):
+                errors.append(f"segment {i}: no valid fact citations")
 
         cited_fields = {known[fid].field for fid in cited}
         hit = _high_risk_hit(seg.text)

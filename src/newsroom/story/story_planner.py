@@ -11,6 +11,7 @@ from ..models.story import StoryPlan
 from ..storage import repositories as repo
 
 _SHORT_TARGET = 45
+_LONG_TARGET = 360         # ~6 min — the YouTube explainer leg
 
 
 def _earthquake_sections(event: CanonicalEvent, facts) -> list[str]:
@@ -51,6 +52,50 @@ def plan_story(
     return StoryPlan(
         story_type=story_type,
         duration_target_s=_SHORT_TARGET,
+        sections=sections,
+        event_id=event_id,
+        revision=event.current_revision,
+    )
+
+
+def plan_longform(
+    conn: sqlite3.Connection, event_id: str
+) -> StoryPlan | None:
+    """Long-form explainer plan — deeper chapters than a short (§18).
+
+    The same fact ledger feeds a longer, multi-chapter treatment: lede,
+    what we know, geographic and temporal context, how the story evolved
+    across revisions, source corroboration, impact assessment, background
+    on the event type, and what to watch next. Each chapter maps to a
+    YouTube chapter marker in the render manifest.
+    """
+    event = repo.get_event(conn, event_id)
+    if not event:
+        return None
+    facts = repo.current_facts(conn, event_id)
+    fields = {f.field for f in facts}
+    revisions = repo.get_revisions(conn, event_id)
+    sources = repo.get_event_source_ids(conn, event_id)
+
+    sections = ["lede", "what_we_know"]
+    if event.latitude is not None:
+        sections.append("where")
+    sections.append("when")
+    if len(revisions) > 1:
+        sections.append("revisions")
+    if len(sources) > 1:
+        sections.append("corroboration")
+    sections.append("impact")
+    # Type-specific background
+    sections.append("background")
+    # Official guidance / what to watch
+    if "instruction" in fields or "due_date" in fields or "expires" in fields:
+        sections.append("guidance")
+    sections.append("what_to_watch")
+    sections.append("close")
+    return StoryPlan(
+        story_type="explainer",
+        duration_target_s=_LONG_TARGET,
         sections=sections,
         event_id=event_id,
         revision=event.current_revision,

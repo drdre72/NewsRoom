@@ -273,3 +273,193 @@ def _select_map_renderer(settings: Settings):
     except Exception:  # noqa: BLE001
         pass
     return None
+
+
+def render_longform(
+    conn: sqlite3.Connection,
+    settings: Settings,
+    event_id: str,
+    dry_run: bool = False,
+) -> dict:
+    """Long-form explainer render — 1920x1080, multi-chapter, ~5-8 min.
+
+    The same event gets a deeper treatment than the short: a multi-chapter
+    script (lede → what we know → context → revisions → corroboration →
+    impact → background → what to watch → close), horizontal 16:9 video,
+    and YouTube chapter markers in the manifest. Same fact ledger, same
+    deterministic validation, same Kokoro voice lock.
+    """
+    from .story.story_planner import plan_longform
+    from .story.script_generator import generate_longform_script
+
+    event = repo.get_event(conn, event_id)
+    if not event:
+        raise ValueError(f"unknown event {event_id}")
+    rev = event.current_revision
+    safe_id = re.sub(r"[^A-Za-z0-9_.-]", "_", event_id)
+    work = cache_dir() / "renders" / f"{safe_id}_r{rev}_long"
+    shots_dir = work / "shots"
+    audio_dir = work / "audio"
+    shots_dir.mkdir(parents=True, exist_ok=True)
+    audio_dir.mkdir(parents=True, exist_ok=True)
+
+    # --- language -----------------------------------------------------
+    ctx = build_fact_context(conn, event_id)
+    plan = plan_longform(conn, event_id)
+    if not plan:
+        raise ValueError(f"no longform plan for {event_id}")
+    script, chapters = generate_longform_script(ctx, plan, settings, event)
+    ok, errors = validate_script(script, ctx, settings)
+    if not ok:
+        raise RuntimeError(f"longform script failed validation: {errors}")
+    script.validated = True
+    story_id = repo.new_id("story")
+    repo.insert_story(conn, story_id, event_id, rev, json.dumps(plan.__dict__),
+                      json.dumps(script.to_dict()), script.generator, True,
+                      "validated")
+
+    # --- narration (per-segment, same Kokoro pipeline) ----------------
+    engine = select_engine(settings)
+    if not engine:
+        raise RuntimeError("longform requires a TTS engine; none available")
+    narration = None
+    narration_degraded = False
+    caption_items: list[tuple[float, float, str]] = []
+    seg_wavs: list[Path] = []
+    voice = (settings.get("tts.kokoro_voice")
+             if engine.name == "kokoro_mlx" else
+             settings.get("tts.say_voice"))
+    t = _TITLE_S
+    for i, seg in enumerate(script.segments):
+        wav = audio_dir / f"seg_{i:02d}.wav"
+        res = None
+        for candidate in _tts_chain(engine, settings):
+            try:
+                res = candidate.synthesize(
+                    seg.text, seg.speech_text,
+                    voice or settings.get("tts.say_voice", ""), wav)
+                if candidate is not engine:
+                    narration_degraded = True
+                break
+            except Exception as exc:  # noqa: BLE001
+                log_event(log, 40, "longform segment tts failed",
+                          engine=candidate.name, error=str(exc),
+                          segment=i)
+        if res is None:
+            if settings.get("tts.strict_voice"):
+                raise RuntimeError(
+                    f"tts failed for segment {i} and strict_voice "
+                    "forbids fallback; longform aborted")
+            break
+        seg_wavs.append(res.path)
+        seg.duration_s = res.duration_s
+        caption_items.append((t, t + res.duration_s, seg.text))
+        t += res.duration_s + _GAP_S
+    if seg_wavs:
+        narration = _concat_audio(seg_wavs, audio_dir / "narration.wav")
+    narration_dur = t - _TITLE_S - _GAP_S if seg_wavs else 0
+
+    # --- resolve chapter start times from caption timeline -----------
+    # The script generator records each chapter's first_segment index;
+    # we look up its caption start time directly.
+    for ch in chapters:
+        fi = ch.get("first_segment", 0)
+        if fi < len(caption_items):
+            ch["start_s"] = round(caption_items[fi][0], 2)
+        elif caption_items:
+            ch["start_s"] = round(caption_items[-1][1], 2)
+        else:
+            ch["start_s"] = _TITLE_S
+
+    # --- visuals (1920x1080 horizontal) -------------------------------
+    vcfg = settings.get("video.longform", {})
+    w = int(vcfg.get("width", 1920))
+    h = int(vcfg.get("height", 1080))
+    fps = int(vcfg.get("fps", 30))
+    vplan = plan_visuals(conn, event, script, w, h, fps)
+
+    # Fit shots to narration
+    middle = [s for s in vplan.shots if s.type not in ("title_card", "source_card")]
+    title = next((s for s in vplan.shots if s.type == "title_card"), None)
+    tail = next((s for s in vplan.shots if s.type == "source_card"), None)
+    if title:
+        title.duration_s = _TITLE_S
+    if tail:
+        tail.duration_s = _TAIL_S
+    target_mid = max(8.0, narration_dur)
+    cur_mid = sum(s.duration_s for s in middle) or 1.0
+    for s in middle:
+        s.duration_s = round(max(3.0, s.duration_s * target_mid / cur_mid), 2)
+
+    card_renderer = CardRenderer()
+    map_renderer = _select_map_renderer(settings)
+    context = {
+        "level": event.impact_level,
+        "event_label": event.event_type.replace("_", " "),
+        "source_line": f"SOURCE: {event.source_ids[0] if event.source_ids else 'unknown'}",
+        "updated": f"UPDATED {event.last_updated[11:19]} UTC",
+    }
+    shot_paths = render_plan(card_renderer, vplan, shots_dir, context,
+                             map_renderer=map_renderer)
+
+    # --- captions + compose --------------------------------------------
+    ass = write_ass(caption_items, work / "captions.ass", w, h)
+    write_srt(caption_items, work / "captions.srt")
+    timeline = Timeline(width=w, height=h, fps=fps,
+                        audio=narration, audio_delay_s=_TITLE_S,
+                        caption_items=caption_items)
+    for shot, path in zip(vplan.shots, shot_paths):
+        timeline.visuals.append(VisualSegment(
+            source=path, duration_s=shot.duration_s,
+            is_sequence=path.is_dir()))
+    slug = event.location_label or event.event_id
+    slug = "".join(c if c.isalnum() else "_" for c in slug)[:40].strip("_")
+    out = output_dir() / "longform" / f"{slug}_r{rev}_longform.mp4"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    compose_short(timeline, out, settings, ass_path=ass)
+
+    # --- manifest + gate (with YouTube chapter markers) ---------------
+    manifest = {
+        "event_id": event_id, "event_revision": rev,
+        "rendered_at": repo.utcnow(),
+        "story_id": story_id,
+        "sources": event.source_ids,
+        "fact_ids": [f.fact_id for f in ctx.current],
+        "format": "longform",
+        "chapters": [{"title": c["title"],
+                      "start_s": c.get("start_s", 0.0)}
+                     for c in chapters],
+        "youtube_chapters": "\n".join(
+            f"{int(c.get('start_s', 0))//60:02d}:{int(c.get('start_s', 0))%60:02d} "
+            f"{c['title']}" for c in chapters),
+        "script": {"generator": script.generator, "validated": True,
+                   "hash": _sha256(work / "captions.srt")},
+        "audio": {"engine": engine.name,
+                  "degraded": narration_degraded,
+                  "hash": _sha256(narration) if narration else None},
+        "visual_plan_hash": hashlib.sha256(
+            json.dumps(vplan.to_dict(), sort_keys=True).encode()).hexdigest(),
+        "video": {"path": str(out), "hash": _sha256(out), "width": w,
+                  "height": h, "fps": fps},
+        "tts_model": engine.name,
+        "renderer": (f"{card_renderer.name}+{map_renderer.name}"
+                     if map_renderer else card_renderer.name),
+        "platform": "macos-arm64",
+        "dry_run": dry_run,
+    }
+    mpath = output_dir() / "manifests" / f"{safe_id}_r{rev}_longform.json"
+    mpath.write_text(json.dumps(manifest, indent=2))
+    for kind, p in (("video", out), ("manifest", mpath), ("caption", ass),
+                    ("audio", narration)):
+        if p:
+            repo.insert_asset(conn, repo.new_id("asset"), kind, str(p),
+                              _sha256(p), event_id, rev,
+                              {"format": "longform"})
+    gate = gate_render(conn, settings, manifest)
+    manifest["publication_gate"] = gate
+    mpath.write_text(json.dumps(manifest, indent=2))
+    log_event(log, 20, "longform render complete", event_id=event_id,
+              revision=rev, video=str(out), gate=gate["verdict"],
+              chapters=len(chapters),
+              renderer=manifest["renderer"], tts=engine.name)
+    return manifest

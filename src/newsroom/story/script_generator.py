@@ -159,6 +159,214 @@ def _developing_close(add) -> None:
         "sources revise their reports.")
 
 
+# -- long-form explainer (§18) --------------------------------------------
+# Chapter markers map to YouTube chapters in the render manifest. Each
+# chapter is a list of (text, *fact_refs) tuples; the template builder
+# stitches them into one Script with chapter boundary metadata.
+
+_BACKGROUND_BY_TYPE = {
+    "earthquake": (
+        "Earthquakes occur when built-up tectonic stress is suddenly "
+        "released along a fault. The magnitude scale is logarithmic: "
+        "each whole number represents roughly thirty-two times more "
+        "energy than the one before it."),
+    "weather_alert": (
+        "The National Weather Service issues alerts at four severity "
+        "levels: advisory, watch, warning, and emergency. A warning "
+        "means hazardous weather is occurring or imminent."),
+    "wildfire": (
+        "Wildfires are tracked by satellites that detect thermal "
+        "anomalies. Acreage is the standard extent metric; containment "
+        "percentages indicate how much of the fire perimeter is "
+        "under control."),
+    "tropical_cyclone": (
+        "Tropical cyclones are rated by sustained wind speed on the "
+        "Saffir-Simpson scale. The scale ranges from Category One to "
+        "Category Five, with higher categories indicating "
+        "increasingly destructive wind speeds."),
+    "space_weather": (
+        "Space weather storms are rated on the NOAA scale for "
+        "geomagnetic storms, solar radiation, and radio blackouts. "
+        "Each scale runs from level one minor to level five extreme."),
+    "conflict_event": (
+        "Conflict event data is aggregated from multiple monitoring "
+        "sources. Corroboration across independent sources increases "
+        "confidence in the reported details."),
+    "economic_indicator": (
+        "Economic indicators are released on fixed schedules by "
+        "government statistical agencies. Markets watch the surprise "
+        "component: how much the actual print differs from "
+        "consensus expectations."),
+    "disaster_declaration": (
+        "FEMA declarations authorize federal assistance. A Major "
+        "Disaster Declaration unlocks Individual Assistance and "
+        "Public Assistance; an Emergency Declaration covers a "
+        "narrower scope of federal support."),
+    "cyber_advisory": (
+        "The Known Exploited Vulnerabilities catalog maintained by "
+        "CISA lists flaws that are being actively exploited in the "
+        "wild. Federal agencies are bound by a Binding Operational "
+        "Directive to remediate by a specified deadline."),
+}
+_BACKGROUND_GENERIC = (
+    "This event is being monitored by the autonomous newsroom. "
+    "Information is sourced from authoritative feeds and verified "
+    "against the fact ledger.")
+
+
+def generate_longform_script(
+    ctx: FactContext,
+    plan: StoryPlan,
+    settings: Settings,
+    event,
+    llm: OllamaClient | None = None,
+) -> tuple[Script, list[dict]]:
+    """Long-form explainer script + chapter markers (§18).
+
+    Returns (Script, chapters) where chapters is a list of
+    {"title": str, "start_s": float} for YouTube chapter export.
+    The script is a deeper, multi-chapter treatment of the same event:
+    lede → what we know (per-type core) → context → revisions →
+    corroboration → impact → background → what to watch → close.
+    """
+    # Build the per-type core segments first (reuse existing templates).
+    core = _script_from_template(ctx, plan, settings)
+
+    # Now wrap the core in long-form chapters.
+    f, segs, add = _template_parts(ctx, settings)
+    chapters: list[dict] = []
+    chapter_titles: list[str] = []
+
+    def _mark_chapter(title: str) -> None:
+        chapters.append({"title": title, "start_s": 0.0,
+                         "first_segment": len(segs)})
+        chapter_titles.append(title)
+
+    # -- Chapter 1: Lede
+    _mark_chapter("Overview")
+    headline_f = f.get("title")
+    if headline_f:
+        add(headline_f.value_display + ".", "title")
+    else:
+        add(core.headline + ".")
+    alert = f.get("alert_level")
+    if alert:
+        add(f"The alert level is {alert.value_display}.", "alert_level")
+
+    # -- Chapter 2: What We Know (the per-type core)
+    _mark_chapter("What We Know")
+    for seg in core.segments:
+        if "developing story" in seg.text.lower():
+            continue                    # the close is handled separately
+        segs.append(seg)
+    chapters[-1]["segments"] = len(core.segments)
+
+    # -- Chapter 3: Where (geographic context)
+    if "where" in plan.sections:
+        _mark_chapter("Location")
+        place = f.get("location_label")
+        if place:
+            add(f"This event is located in {place.value_display}.",
+                "location_label")
+        lat = f.get("latitude")
+        lon = f.get("longitude")
+        if lat and lon:
+            add(f"The coordinates are {lat.value_display} degrees "
+                f"latitude, {lon.value_display} degrees longitude.",
+                "latitude", "longitude")
+
+    # -- Chapter 4: When (timeline)
+    if "when" in plan.sections:
+        _mark_chapter("Timeline")
+        when = f.get("occurred_at")
+        if when:
+            add(f"The event was reported at {when.value_display} UTC.",
+                "occurred_at")
+        updated = f.get("last_updated")
+        if updated and updated.value != (when.value if when else None):
+            add(f"The most recent update was at {updated.value_display}.",
+                "last_updated")
+
+    # -- Chapter 5: Revisions (how the story evolved)
+    if "revisions" in plan.sections and ctx.revisions:
+        _mark_chapter("How the Story Evolved")
+        _revision_segments(ctx, add)
+
+    # -- Chapter 6: Corroboration (source confirmation)
+    if "corroboration" in plan.sections:
+        sources = [s for s in (event.source_ids or [])
+                   if s and s != (f.get("title", "").value
+                                   if f.get("title") else None)]
+        if len(sources) > 1:
+            _mark_chapter("Source Corroboration")
+            add("This event has been confirmed by multiple independent "
+                "authoritative sources.")
+            src_url = f.get("source_url")
+            if src_url:
+                add(f"Source data is available at {src_url.value_display}.",
+                    "source_url")
+            cat_title = f.get("category_title")
+            if cat_title:
+                add(f"The event is categorized as "
+                    f"{cat_title.value_display}.", "category_title")
+
+    # -- Chapter 7: Impact
+    _mark_chapter("Impact Assessment")
+    sev = f.get("severity")
+    cat = f.get("category_title") or f.get("category")
+    if sev:
+        unit = f.get("magnitude_unit")
+        suffix = f" {unit.value_display}" if unit else ""
+        add(f"The measured severity is {sev.value_display}{suffix}.",
+            "severity", *(["magnitude_unit"] if unit else []))
+    if cat:
+        add(f"Event class: {cat.value_display}.", cat.field)
+    alert = f.get("alert_level")
+    if alert:
+        add(f"The alert level is {alert.value_display}.", "alert_level")
+    pop = f.get("population")
+    if pop:
+        add(f"Affected population: {pop.value_display}.", "population")
+
+    # -- Chapter 8: Background (type context)
+    if "background" in plan.sections:
+        _mark_chapter("Background")
+        bg = _BACKGROUND_BY_TYPE.get(ctx.event_type, _BACKGROUND_GENERIC)
+        add(bg)
+
+    # -- Chapter 9: Guidance / what to watch
+    if "guidance" in plan.sections:
+        _mark_chapter("Official Guidance")
+        instr = f.get("instruction")
+        if instr:
+            add(f"Official instruction: {instr.value_display}", "instruction")
+        due = f.get("due_date")
+        if due:
+            add(f"The remediation deadline is {due.value_display}.",
+                "due_date")
+        expires = f.get("expires") or f.get("ends")
+        if expires:
+            add(f"The alert remains in effect until "
+                f"{expires.value_display}.", expires.field)
+
+    # -- Chapter 10: What to Watch
+    if "what_to_watch" in plan.sections:
+        _mark_chapter("What to Watch")
+        add("We will continue to monitor authoritative sources for "
+            "updates. Revisions will be reported as they are confirmed.")
+
+    # -- Final chapter: Close
+    _mark_chapter("Closing")
+    _developing_close(add)
+
+    script = Script(
+        headline=core.headline, segments=segs, generator="longform:template",
+        event_id=ctx.event_id, revision=ctx.revision,
+        extra={"chapters": chapter_titles},
+    )
+    return script, chapters
+
+
 def _script_from_template(
     ctx: FactContext, plan: StoryPlan, settings: Settings
 ) -> Script:
