@@ -202,6 +202,26 @@ def ingest_observation(
         )
         event.confidence = event.confidence_score
         repo.upsert_event(conn, event)
+
+        # Auto-render gate (§72): revisions scoring high enough queue a
+        # SHORT_RENDER job inside the same transaction — a scored revision
+        # never exists without its render job. Deduped per (event, revision).
+        settings = load_settings()
+        auto = settings.get("auto_render", {}) or {}
+        levels = ["BACKGROUND", "NORMAL", "UPDATE", "BREAKING", "FLASH"]
+        if (levels.index(level) >= levels.index(auto.get("min_impact", "UPDATE"))
+                and event.confidence_score >= float(
+                    auto.get("min_confidence", 0.70))):
+            dup = conn.execute(
+                "SELECT 1 FROM jobs WHERE event_id=? AND revision=?"
+                " AND job_type=? AND status IN ('queued','running','done')"
+                " LIMIT 1",
+                (event.event_id, event.current_revision, JobType.SHORT_RENDER),
+            ).fetchone()
+            if not dup:
+                outcome["jobs"] = enqueue_story_pipeline(
+                    conn, event.event_id, event.current_revision, level)
+
     outcome["event_id"] = event.event_id
     outcome["revision"] = event.current_revision
     outcome["impact"] = {"score": impact_score, "level": level}

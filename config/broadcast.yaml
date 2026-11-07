@@ -26,9 +26,26 @@ states:
   - DEGRADED
   - OFF_AIR
 
+# Auto-render gate (§72): revisions at/above this impact + confidence queue a
+# SHORT_RENDER job; the service loop drains the queue between poll cycles.
+auto_render:
+  min_impact: UPDATE
+  min_confidence: 0.70
+
 playout:
   width: 1920
   height: 1080
   fps: 30
   encoder: h264_videotoolbox
   audio: aac
+  video_bitrate: 6000k
+  audio_bitrate: 160k
+  # Local HLS preview (§34 dry-run output). Segments append to live.m3u8;
+  # the preview server serves this directory over HTTP.
+  hls:
+    dir: output/preview
+    playlist: live.m3u8
+    segment_time: 4
+    list_size: 12
+  standby_seconds: 20          # slate duration when the rundown has nothing
+  port: 8788                   # preview HTTP port

@@ -370,3 +370,42 @@ def assets_for_event(conn: sqlite3.Connection, event_id: str) -> list[sqlite3.Ro
     return conn.execute(
         "SELECT * FROM assets WHERE event_id=? ORDER BY created_at", (event_id,)
     ).fetchall()
+
+
+def latest_video_asset(conn: sqlite3.Connection, event_id: str,
+                       revision: int) -> sqlite3.Row | None:
+    return conn.execute(
+        "SELECT * FROM assets WHERE event_id=? AND revision=? AND kind='video'"
+        " ORDER BY created_at DESC LIMIT 1", (event_id, revision),
+    ).fetchone()
+
+
+# ------------------------------------------------------------------ air log
+
+def log_air(conn: sqlite3.Connection, air_id: str, kind: str,
+            event_id: str | None, revision: int | None, rundown_id: str | None,
+            asset_path: str | None, duration_s: float,
+            interrupted: bool = False, reason: str | None = None) -> None:
+    conn.execute(
+        "INSERT INTO air_log (air_id, kind, event_id, revision, rundown_id,"
+        " asset_path, started_at, duration_s, interrupted, reason)"
+        " VALUES (?,?,?,?,?,?, strftime('%Y-%m-%dT%H:%M:%fZ','now'),?,?,?)",
+        (air_id, kind, event_id, revision, rundown_id, asset_path,
+         duration_s, int(interrupted), reason),
+    )
+
+
+def aired_recently(conn: sqlite3.Connection, rundown_id: str,
+                   within_seconds: int) -> list[sqlite3.Row]:
+    """Items aired under this rundown segment within the lookback window."""
+    return conn.execute(
+        "SELECT * FROM air_log WHERE rundown_id=? AND started_at >="
+        " strftime('%Y-%m-%dT%H:%M:%fZ','now', ?)",
+        (rundown_id, f"-{int(within_seconds)} seconds"),
+    ).fetchall()
+
+
+def air_log_tail(conn: sqlite3.Connection, limit: int = 20) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM air_log ORDER BY started_at DESC LIMIT ?", (limit,)
+    ).fetchall()

@@ -74,23 +74,41 @@ process — that prevents sleep without touching your `pmset` config.
 Verify with `pmset -g assertions` while live: you should see
 `PreventSystemSleep` held by the newsroom playout.
 
-## launchd services (Phase 11)
+## launchd services
 
-Repository-managed plists live in `src/newsroom/macos/launchd/`:
+Repository-managed plists live in `src/newsroom/macos/launchd/` — templates
+with `@TOKENS@` substituted at install time (never hand-edit the installed
+copies; rerun install):
 
-- `com.newsroom.core` — ingestion, intelligence, jobs (`RunAtLoad`, bounded `KeepAlive`)
-- `com.newsroom.broadcast` — playout + encoder (Phase 10+)
-- `com.newsroom.health` — status endpoint + supervisor
+- `com.newsroom.core` — `main.py run --poll`: ingestion, intelligence,
+  render-queue drain (`RunAtLoad`, `KeepAlive` unconditional — even a clean
+  SIGTERM respawns; these are always-on services)
+- `com.newsroom.broadcast` — `main.py broadcast`: the Director + HLS playout
+  writing `output/preview/live.m3u8` (local preview; no YouTube output yet)
+- `com.newsroom.health` — `main.py preview`: HTTP server on :8788 serving
+  the HLS preview, `/status.json` health, and the air log
 
-Install/uninstall:
+Manage them through the CLI (works without an editable install):
 
 ```bash
-python -m newsroom.macos.install_services
-python -m newsroom.macos.uninstall_services
+python main.py services install            # renders + bootstraps all three
+python main.py services install --print    # preview the rendered plists
+python main.py services status
+python main.py services uninstall
 ```
 
-Logs land in `logs/` as JSON lines plus per-service stdout/stderr. Never
-edit plists by hand — regenerate them.
+Logs land in `logs/` (JSON lines) plus per-service stdout/stderr
+(`logs/{core,broadcast,preview}.{out,err}.log`). Single-director safety:
+the broadcast process holds an `flock` on `output/preview/director.lock`;
+a second `main.py broadcast` exits immediately rather than corrupt the
+playlist.
+
+### Local preview
+
+Open **http://localhost:8788/** in Safari (HLS plays natively; no JavaScript
+player needed). The same mux will later feed YouTube via a `tee` output —
+what you watch locally is what would stream. `publishing.automatic: false`
+keeps the RTMP output unattached (§66).
 
 ## Boot recovery (§39)
 

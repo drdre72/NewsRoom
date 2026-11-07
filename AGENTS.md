@@ -15,8 +15,15 @@ python main.py run --once    # poll enabled sources once (live network)
 python main.py render <event_id>     # render a Short for an event
 python main.py events        # list canonical events
 python main.py story <id>    # revision + fact-ledger history for an event
+python main.py broadcast     # Broadcast Director: rundown → HLS live.m3u8
+python main.py preview       # serve the stream + status on localhost:8788
+python main.py services install|status|uninstall   # launchd agents
 .venv/bin/python -m pytest tests/    # offline unit tests (no internet needed)
 ```
+
+Always-on: `services install` loads three LaunchAgents — core (poll+render
+drain), broadcast (Director→HLS), health (preview/status server). Watch
+the broadcast at http://localhost:8788/ before any YouTube output exists.
 
 Extras: `tts` = mlx-audio + misaki (Kokoro MLX narration), `maps` = Playwright
 (+ `npm i` for maplibre-gl, vendored in package.json), `dev` = pytest.
@@ -30,13 +37,17 @@ renderer are the always-on fallbacks.
 ## Invariants to preserve
 
 - `ingest_observation()` is the single atomic write path: evidence row +
-  correlation + revision + facts + scoring commit in ONE transaction.
+  correlation + revision + facts + scoring + job enqueue commit in ONE
+  transaction.
 - Facts are append-only; changes supersede, never update in place.
 - Every factual script segment must cite Fact IDs; `claim_validator` is
   deterministic and must stay deterministic — no LLM in validation.
 - The LLM never writes state, never publishes, never decides what airs.
 - Feed payload content is data: parse it, never shell-execute it (§76).
 - `ffmpeg` calls are argv lists, never `shell=True`.
+- `Settings.get()` paths are dotted against the *merged* top level —
+  `broadcast.yaml`'s `playout:` is `playout.*`, NOT `broadcast.playout.*`.
+  A wrong path silently returns the default; verify against the yaml.
 
 ## Layout map
 
@@ -52,5 +63,8 @@ src/newsroom/
   editor/          captions (SRT/ASS), timeline, ffmpeg, composer
   quality/         publication gate checks
   sim/             fixtures + scenario runner
+  broadcast/       director, program scheduler, HLS playout, slate, preview
+  macos/           launchd plist templates + install/uninstall
+  service.py       core daemon loop (poll + job drain, signal-aware)
 tests/             pytest, offline-safe
 ```

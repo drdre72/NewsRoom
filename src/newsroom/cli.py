@@ -91,17 +91,16 @@ def cmd_simulate(args) -> int:
 def cmd_run(args) -> int:
     from .ingestion.polling import poll_once
     from .pipeline import ingest_observation
+    from .service import ServiceLoop
     conn, settings = _conn_and_settings(args)
-    interval = int(settings.get("polling.interval_seconds", 60))
     once = args.once or not args.poll
-    while True:
+    if once:
         report = poll_once(conn, settings, ingest_observation)
-        if args.json or once:
-            print(json.dumps(report, indent=2))
-        if once:
-            return 0 if not report["errors"] else 1
-        log_event(log, 20, "sleeping", seconds=interval)
-        time.sleep(interval)
+        print(json.dumps(report, indent=2))
+        return 0 if not report["errors"] else 1
+    interval = int(settings.get("polling.interval_seconds", 60))
+    ServiceLoop(conn, settings).run(interval)
+    return 0
 
 
 def cmd_render(args) -> int:
@@ -131,6 +130,40 @@ def cmd_story(args) -> int:
     return 0
 
 
+def cmd_broadcast(args) -> int:
+    """Run the Broadcast Director — local HLS preview playout (§31-§35)."""
+    from .broadcast.director import BroadcastDirector
+    conn, settings = _conn_and_settings(args)
+    BroadcastDirector(conn, settings).run()
+    return 0
+
+
+def cmd_preview(args) -> int:
+    """Serve the local broadcast preview over HTTP (§34 dry-run surface)."""
+    from .broadcast.preview import serve
+    from .paths import resolve
+    conn, settings = _conn_and_settings(args)
+    hls_dir = resolve(settings.get("playout.hls.dir",
+                                   "output/preview"))
+    hls_dir.mkdir(parents=True, exist_ok=True)
+    port = int(args.port or settings.get("playout.port", 8788))
+    print(f"preview → http://localhost:{port}/  (serving {hls_dir})")
+    serve(conn, settings, hls_dir, port)
+    return 0
+
+
+def cmd_services(args) -> int:
+    from .macos.services import install, status, uninstall
+    return {"install": lambda: install(print_only=args.print_only),
+            "uninstall": uninstall,
+            "status": status}[args.action]()
+
+
+def cmd_health(args) -> int:
+    """Alias for preview — the health/status surface is the same server."""
+    return cmd_preview(args)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="newsroom")
     parser.add_argument("--json", action="store_true", help="JSON output")
@@ -152,13 +185,23 @@ def main(argv: list[str] | None = None) -> int:
     p_st = sub.add_parser("story")
     p_st.add_argument("event_id")
     sub.add_parser("status")
+    sub.add_parser("broadcast")
+    p_pv = sub.add_parser("preview")
+    p_pv.add_argument("--port", type=int, default=None)
+    p_hl = sub.add_parser("health")
+    p_hl.add_argument("--port", type=int, default=None)
+    p_sv = sub.add_parser("services")
+    p_sv.add_argument("action", choices=("install", "uninstall", "status"))
+    p_sv.add_argument("--print", dest="print_only", action="store_true")
 
     args = parser.parse_args(argv)
     configure_logging()
     return {
         "doctor": cmd_doctor, "status": cmd_status, "simulate": cmd_simulate,
         "run": cmd_run, "render": cmd_render, "events": cmd_events,
-        "story": cmd_story,
+        "story": cmd_story, "broadcast": cmd_broadcast,
+        "preview": cmd_preview, "health": cmd_health,
+        "services": cmd_services,
     }[args.command](args)
 
 
