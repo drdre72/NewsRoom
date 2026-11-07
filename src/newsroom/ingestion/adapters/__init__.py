@@ -11,6 +11,9 @@ from .bls import BlsAdapter
 from .eia import EiaAdapter
 from .fema import FemaAdapter
 from .cisa import CisaAdapter
+from .treasury import TreasuryAdapter
+from .nhc import NhcAdapter
+from .coinbase import CoinbaseAdapter
 
 _REGISTRY = {
     "usgs_geojson": UsgsAdapter,
@@ -25,6 +28,9 @@ _REGISTRY = {
     "eia": EiaAdapter,
     "fema": FemaAdapter,
     "cisa_kev": CisaAdapter,
+    "treasury": TreasuryAdapter,
+    "noaa_nhc": NhcAdapter,
+    "coinbase": CoinbaseAdapter,
 }
 
 

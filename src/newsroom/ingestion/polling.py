@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
 
 from ..config import Settings
 from ..logging import get_logger, log_event
 from .adapters import adapter_for
 
 log = get_logger("polling")
+_last_successful_poll: dict[str, float] = {}
 
 
 def enabled_sources(settings: Settings) -> list[tuple[str, dict]]:
@@ -40,9 +42,13 @@ def poll_once(conn: sqlite3.Connection, settings: Settings, ingest) -> dict:
             continue
         interval = cfg.get("poll_every_seconds")
         if interval:
-            # Per-source cadence: skip when our newest stored observation is
-            # fresher than the interval (stale data still polls — that's the
-            # point of tracking it).
+            # A successful fetch can contain zero items or only duplicates.
+            # Observation age alone would then re-fetch every core tick.
+            last_poll = _last_successful_poll.get(name)
+            if last_poll is not None and time.monotonic() - last_poll < float(interval):
+                report["sources"][name] = {
+                    "ok": True, "skipped": "interval"}
+                continue
             from ..intelligence.freshness import latest_observation_age
             age = latest_observation_age(conn, name)
             if age is not None and age < float(interval):
@@ -63,6 +69,7 @@ def poll_once(conn: sqlite3.Connection, settings: Settings, ingest) -> dict:
                                      result.retrieved_at)
                     report["new_items"] += int(outcome.get("new_observation", 0))
                     report["revisions"] += int(outcome.get("new_revision", 0))
+            _last_successful_poll[name] = time.monotonic()
             report["sources"][name] = {"items": items, "ok": True}
             log_event(log, 20, "poll complete", source=name, items=items,
                       feed=result.feed_url)

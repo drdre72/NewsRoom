@@ -40,13 +40,16 @@ LEDGER_FIELDS = (
     "fatalities", "casualties", "injuries",
     # FRED + BLS + EIA economic indicators
     "series_id", "series_label", "units", "value_date", "previous_value",
-    "delta", "delta_pct", "period_name",
+    "delta", "delta_pct", "period_name", "rate_value", "previous_rate",
     # FEMA disaster declarations
     "declaration_id", "declaration_type", "declaration_label", "state",
     "incident_type", "areas", "area_count", "ih_program", "pa_program",
     # CISA known-exploited-vulnerabilities advisories
     "cve_id", "vendor", "product", "vuln_name", "short_description",
     "due_date", "ransomware_use",
+    # Treasury + Coinbase
+    "pair", "storm_name", "storm_id", "classification",
+    "advisory_num", "advisory_issuance", "pressure",
 )
 
 

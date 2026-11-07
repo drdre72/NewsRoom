@@ -25,6 +25,7 @@ SEGMENT_TYPES = {
                       "conflict_event", "protest"],
     "space_weather": ["space_weather"],
     "us_desk": ["disaster_declaration", "cyber_advisory"],
+    "markets": ["market_quote"],
     "economy": ["economic_indicator"],
     "explainer": ["economic_indicator"],
 }

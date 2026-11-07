@@ -379,8 +379,10 @@ def assets_for_event(conn: sqlite3.Connection, event_id: str) -> list[sqlite3.Ro
 
 def latest_video_asset(conn: sqlite3.Connection, event_id: str,
                        revision: int) -> sqlite3.Row | None:
+    # Long-form uses the same "video" kind but is not a broadcast Short.
     return conn.execute(
         "SELECT * FROM assets WHERE event_id=? AND revision=? AND kind='video'"
+        " AND COALESCE(json_extract(meta_json, '$.format'), 'short')='short'"
         " ORDER BY created_at DESC LIMIT 1", (event_id, revision),
     ).fetchone()
 

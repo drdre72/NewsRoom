@@ -135,6 +135,41 @@ sources:
       kev: https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json
     poll_feed: kev
 
+  treasury:
+    kind: treasury
+    authority: 0.95
+    enabled: true
+    poll_every_seconds: 21600        # monthly data releases
+    feeds:
+      rates: https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/avg_interest_rates
+    poll_feed: rates
+    securities:                      # security_desc -> label/move_scale
+      "Treasury Bills":  {label: "Average T-Bill Rate",  move_scale: 1.0}
+      "Treasury Notes":  {label: "Average T-Note Rate",  move_scale: 1.0}
+      "Treasury Bonds":  {label: "Average T-Bond Rate",  move_scale: 1.5}
+      "Treasury Inflation-Protected Securities (TIPS)": {label: "Average TIPS Rate", move_scale: 1.0}
+
+  nhc:
+    kind: noaa_nhc
+    authority: 0.95
+    enabled: true
+    poll_every_seconds: 1800         # advisories every 6h; poll for freshness
+    feeds:
+      storms: https://www.nhc.noaa.gov/CurrentStorms.json
+    poll_feed: storms
+
+  coinbase:
+    kind: coinbase
+    authority: 0.85
+    enabled: true
+    poll_every_seconds: 300           # Coinbase spot snapshots, 5min cadence
+    feeds:
+      spot: https://api.coinbase.com/v2/prices
+    poll_feed: spot
+    pairs:                            # pair -> label/move_scale
+      BTC-USD: {label: "Bitcoin",  move_scale: 5.0}
+      ETH-USD: {label: "Ethereum", move_scale: 7.0}
+
 # Cross-source event fusion (§16)
 fusion:
   time_window_seconds: 300

@@ -154,6 +154,19 @@ def ingest_observation(
         repo.link_observation(conn, obs_record.observation_id, event.event_id)
 
         prior = repo.latest_revision_snapshot(conn, event.event_id)
+        if norm.event_type == "market_quote":
+            # Market moves are against the last *stored* quote of this pair,
+            # never against a constant baseline or another asset's price.
+            previous = prior.get("severity") if prior else None
+            scale = float(snapshot.get("move_scale") or 0)
+            if previous is not None and float(previous) and scale > 0:
+                delta = round(float(snapshot["severity"]) - float(previous), 6)
+                delta_pct = round(delta / float(previous) * 100, 4)
+                snapshot.update(previous_value=previous, delta=delta,
+                                delta_pct=delta_pct,
+                                severity_norm=min(1.0, abs(delta_pct) / scale))
+            else:
+                snapshot["severity_norm"] = 0.0
         changed = diff_snapshots(prior, snapshot)
         if prior is None or changed:
             revision_no = event.current_revision + 1
@@ -193,6 +206,8 @@ def ingest_observation(
             event.extra["alert_event"] = norm.fields["alert_event"]
         if norm.fields.get("series_id"):
             event.extra["series_id"] = norm.fields["series_id"]
+        if norm.fields.get("storm_name"):
+            event.extra["storm_name"] = norm.fields["storm_name"]
 
         impact_score, level = score_impact(event.event_type, merged_snapshot,
                                            load_settings())

@@ -377,6 +377,8 @@ def _script_from_template(
         return _earthquake_template(ctx, settings)
     if ctx.event_type == "economic_indicator":
         return _econ_template(ctx, settings)
+    if ctx.event_type == "market_quote":
+        return _market_template(ctx, settings)
     if ctx.event_type == "disaster_declaration":
         return _fema_template(ctx, settings)
     if ctx.event_type == "cyber_advisory":
@@ -461,8 +463,13 @@ def _eonet_template(ctx: FactContext, settings: Settings) -> Script:
             "fatalities")
     elif sev:
         suffix = f" {unit.value_display}" if unit else ""
-        add(f"The latest measured extent is {sev.value_display}{suffix}.",
-            "severity", *(["magnitude_unit"] if unit else []))
+        if ctx.event_type == "tropical_cyclone":
+            add(f"The source reports wind speed of "
+                f"{sev.value_display}{suffix}.",
+                "severity", *(["magnitude_unit"] if unit else []))
+        else:
+            add(f"The latest measured extent is {sev.value_display}{suffix}.",
+                "severity", *(["magnitude_unit"] if unit else []))
 
     alert_level = f.get("alert_level")
     if alert_level:
@@ -498,11 +505,11 @@ def _econ_template(ctx: FactContext, settings: Settings) -> Script:
     f, segs, add = _template_parts(ctx, settings)
 
     label = f.get("series_label")
-    val = f.get("severity")            # the print itself lands in severity
+    val = f.get("rate_value") or f.get("severity")
     units = f.get("units")
     period = f.get("period_name") or f.get("value_date")
     if label and val:
-        refs = ["series_label", "severity"]
+        refs = ["series_label", val.field]
         text = f"{label.value_display} came in at {val.value_display}"
         if units:
             text += f" {units.value_display}"
@@ -516,9 +523,9 @@ def _econ_template(ctx: FactContext, settings: Settings) -> Script:
 
     delta = f.get("delta")
     dpct = f.get("delta_pct")
-    prev = f.get("previous_value")
+    prev = f.get("previous_rate") or f.get("previous_value")
     if dpct and prev:
-        refs = ["delta_pct", "previous_value"]
+        refs = ["delta_pct", prev.field]
         text = (f"That compares with {prev.value_display}"
                 + (f" {units.value_display}" if units else "")
                 + " in the previous reading — a move of "
@@ -538,6 +545,30 @@ def _econ_template(ctx: FactContext, settings: Settings) -> Script:
                 "Economic data bulletin")
     return Script(headline=headline, segments=segs, generator="template",
                   event_id=ctx.event_id, revision=ctx.revision)
+
+
+def _market_template(ctx: FactContext, settings: Settings) -> Script:
+    """Quote only observed prices and ledger-derived moves; no forecast."""
+    f, segs, add = _template_parts(ctx, settings)
+    label, price = f.get("series_label"), f.get("severity")
+    pair, units = f.get("pair"), f.get("units")
+    if label and price and pair and units:
+        # Market quotes are two-decimal snapshots in the fact ledger.
+        add(f"Coinbase reports {label.value_display} at "
+            f"{price.value:.2f} {units.value_display} per unit, "
+            f"for {pair.value_display}.",
+            "series_label", "severity", "units", "pair")
+    prev, pct = f.get("previous_value"), f.get("delta_pct")
+    if prev and pct and units:
+        add(f"The prior observed quote was {prev.value:.2f} "
+            f"{units.value_display}, a change of "
+            f"{pct.value_display} percent since that observation.",
+            "previous_value", "units", "delta_pct")
+    _developing_close(add)
+    return Script(headline=(f"{label.value_display} spot price" if label
+                            else "Market quote"), segments=segs,
+                  generator="template", event_id=ctx.event_id,
+                  revision=ctx.revision)
 
 
 def _fema_template(ctx: FactContext, settings: Settings) -> Script:

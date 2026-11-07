@@ -155,6 +155,23 @@ AND `publishing.automatic: true`. All three are off by default (§66, §77).
 - **CISA KEV** known-exploited-vulnerabilities.json — actively exploited
   CVEs as `cyber_advisory` events; `lookback_days: 2` means only new
   catalog additions emit (no key).
+- **Treasury FiscalData** monthly average rates on Treasury Bills, Notes,
+  Bonds and TIPS, as stable `economic_indicator` series (no key). These are
+  monthly historical averages, **not** live market yields.
+- **NOAA NHC** `CurrentStorms.json` — active storms, wind speeds and
+  advisory revisions (no key). Shares `tropical_cyclone` with GDACS;
+  cross-source fusion requires matching time and position.
+- **Coinbase** spot snapshots for BTC-USD and ETH-USD (no key). Each
+  `market_quote` revision cites the exchange's price and compares it only
+  to the preceding stored quote; the feed gives no exchange timestamp.
+  This is exchange-specific crypto context, not licensed consolidated
+  real-time market data. `markets` joins the severity-first rundown;
+  Coinbase confidence is below the BREAKING interrupt gate.
+
+The poller remembers successful fetches in process (including empty or
+unchanged feeds) so source intervals remain enforced without new evidence;
+it retries after a failed fetch. Launchd restarts reset that memory.
+Automatic YouTube publishing and RTMP remain disabled.
 
 ### Rundown ordering
 

@@ -60,7 +60,7 @@ renderer are the always-on fallbacks.
 config/            all tunables (yaml) — sources, thresholds, models
 src/newsroom/
   ingestion/       adapters (usgs, nws, eonet, gdacs, swpc, acled, gdelt,
-                   fred, bls, eia, fema, cisa),
+                   fred, bls, eia, fema, cisa, treasury, nhc, coinbase),
                    normalizer, fusion, revisions, polling
   intelligence/    fact_ledger, impact_engine, confidence_engine, freshness
   story/           planner, script_generator, claim_validator, memory
