@@ -314,10 +314,15 @@ def complete_job(conn: sqlite3.Connection, job_id: str, error: str | None = None
     )
 
 
-def retry_job(conn: sqlite3.Connection, job_id: str, error: str) -> None:
+def retry_job(conn: sqlite3.Connection, job_id: str, error: str,
+              max_retries: int = 3) -> None:
+    """Requeue a failed job, or dead-letter it once retries are exhausted —
+    a deterministic failure (e.g. validator rejection) must not loop forever."""
     conn.execute(
-        "UPDATE jobs SET status='queued', started_at=NULL, retry_count=retry_count+1,"
-        " error=? WHERE job_id=?", (error, job_id),
+        "UPDATE jobs SET status=CASE WHEN retry_count+1>=? THEN 'failed' ELSE 'queued' END,"
+        " started_at=NULL, completed_at=CASE WHEN retry_count+1>=? THEN ? ELSE NULL END,"
+        " retry_count=retry_count+1, error=? WHERE job_id=?",
+        (max_retries, max_retries, utcnow(), error, job_id),
     )
 
 

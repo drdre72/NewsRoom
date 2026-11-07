@@ -23,7 +23,7 @@ from .context_builder import FactContext
 # Words that trigger high-risk scrutiny (§15). If present and no cited fact
 # carries them, the segment is rejected.
 _HIGH_RISK = {
-    "casualt": r"\bcasualt", "fatalit": r"\bfatalit", "deaths?\b": r"\bdeaths?\b",
+    "casualt": r"\bcasualt", "fatalit": r"\bfatalit", r"deaths?\b": r"\bdeaths?\b",
     "killed": r"\bkilled\b", "injur": r"\binjur", "terror": r"\bterror",
     "attack": r"\battack", "explosion cause": None,
     "damage": r"\bdamag", "destroyed": r"\bdestroy",
@@ -91,7 +91,17 @@ def validate_script(
         cited_fields = {known[fid].field for fid in cited}
         hit = _high_risk_hit(seg.text)
         if hit and not (cited_fields & risk_fields):
-            errors.append(f"segment {i}: high-risk claim '{hit}' unsupported by cited facts")
+            # Verbatim-sourced claims are supported too: the hit term must
+            # appear in a cited fact's value ("Most flood deaths occur in
+            # vehicles" quotes the alert's own instruction fact). Numbers
+            # remain independently guarded by the traceable-number rule.
+            cited_text = " ".join(
+                f"{known[fid].value} {known[fid].value_display}".lower()
+                for fid in cited)
+            pat = _HIGH_RISK.get(hit)
+            if not (pat and re.search(pat, cited_text)):
+                errors.append(
+                    f"segment {i}: high-risk claim '{hit}' unsupported by cited facts")
 
         for num in _extract_numbers(seg.text):
             if _BENIGN_NUMBERS.match(num):

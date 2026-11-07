@@ -70,10 +70,20 @@ def configure(level: int = logging.INFO, json_file: bool = True) -> None:
     _CONFIGURED = True
 
 
+class _Adapter(logging.LoggerAdapter):
+    # stdlib process() REPLACES kwargs["extra"] with self.extra — per-call
+    # fields from log_event were being silently dropped everywhere.
+    def process(self, msg, kwargs):
+        extra = dict(self.extra)
+        extra.update(kwargs.pop("extra", None) or {})
+        kwargs["extra"] = extra
+        return msg, kwargs
+
+
 def get_logger(component: str) -> logging.LoggerAdapter:
     configure()
     logger = logging.getLogger(f"newsroom.{component}")
-    return logging.LoggerAdapter(logger, {"component": component})
+    return _Adapter(logger, {"component": component})
 
 
 def log_event(logger: logging.LoggerAdapter, level: int, msg: str, **fields: Any) -> None:

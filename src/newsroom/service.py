@@ -74,7 +74,10 @@ class ServiceLoop:
                 log_event(log, 20, "job done", job_id=job.job_id,
                           type=job.job_type)
             except Exception as exc:  # noqa: BLE001 — bad job ≠ dead service
-                repo.retry_job(self.conn, job.job_id, str(exc))
+                repo.retry_job(
+                    self.conn, job.job_id, str(exc),
+                    max_retries=int(self.settings.get(
+                        "service.max_job_retries", 3)))
                 log_event(log, 40, "job failed", job_id=job.job_id,
                           type=job.job_type, error=str(exc))
 
