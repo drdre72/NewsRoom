@@ -131,6 +131,16 @@ AND `publishing.automatic: true`. All three are off by default (§66, §77).
   radiation storms (S1-S5), radio blackouts (R1-R5), K-index crossings
   (`poll_every_seconds: 900`). Repeated serials of the same message code
   revise one event; new thresholds escalate to new events.
+- **ACLED** `acled/read` — curated conflict + protest events with actors,
+  geography, and fatality counts (`poll_every_seconds: 3600`). Requires
+  `ACLED_API_KEY` + `ACLED_EMAIL` env vars (free registration at
+  developer.acleddata.com); the source reports `skipped: credentials`
+  while unset — no error spam.
+- **GDELT** Events v2 export — global media event database, CAMEO-coded
+  conflict rows with actors, Goldstein scale, and source counts
+  (`poll_every_seconds: 1800`, ~10MB zip). Shares `conflict_event` with
+  ACLED so the two fuse and corroborate; fatality claims cite the §15
+  `fatalities` fact explicitly.
 
 ### Rundown ordering
 

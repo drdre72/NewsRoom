@@ -240,7 +240,12 @@ def _eonet_template(ctx: FactContext, settings: Settings) -> Script:
 
     sev = f.get("severity")
     unit = f.get("magnitude_unit")
-    if sev:
+    fat = f.get("fatalities")
+    if fat and fat.value:
+        # §15: fatality claims must cite the fatalities fact itself.
+        add(f"The source reports {fat.value_display} fatalities.",
+            "fatalities")
+    elif sev:
         suffix = f" {unit.value_display}" if unit else ""
         add(f"The latest measured extent is {sev.value_display}{suffix}.",
             "severity", *(["magnitude_unit"] if unit else []))

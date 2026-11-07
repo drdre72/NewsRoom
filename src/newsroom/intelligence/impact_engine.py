@@ -62,8 +62,12 @@ def _generic_score(snapshot: dict[str, Any], cfg: dict) -> float:
     Configured in thresholds.yaml per event_type; closed events lose their
     penalty."""
     sev = cfg.get("severity", {})
-    total = sev.get("weight", 0) * _norm(
-        snapshot.get("severity"), sev.get("min", 0), sev.get("max", 1))
+    # severity_norm is adapter-precomputed (e.g. fatalities/50, mentions/150)
+    # when the family's units differ per source; else normalize by config.
+    snorm = snapshot.get("severity_norm")
+    total = sev.get("weight", 0) * (
+        float(snorm) if snorm is not None else _norm(
+            snapshot.get("severity"), sev.get("min", 0), sev.get("max", 1)))
     for map_field in ("category", "alert_level"):
         total += _mapped(snapshot, map_field, cfg.get(map_field, {}),
                          default=0.3)

@@ -30,6 +30,14 @@ LEDGER_FIELDS = (
     # GDACS + SWPC
     "alert_level", "gdacs_type", "country", "population",
     "swpc_code", "noaa_scale", "product_id",
+    # ACLED + GDELT conflict events
+    "disorder_type", "acled_type", "sub_event_type", "actor1", "actor2",
+    "admin1", "region", "geo_precision", "source_scale", "severity_norm",
+    "goldstein", "num_mentions", "num_sources", "num_articles", "avg_tone",
+    "quad_class", "event_code", "cameo_desc", "action_geo",
+    "action_country", "is_root",
+    # §15 high-risk — ledgerable so claims can cite them explicitly
+    "fatalities", "casualties", "injuries",
 )
 
 

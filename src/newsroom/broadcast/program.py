@@ -21,7 +21,8 @@ SEGMENT_TYPES = {
     "world_weather": ["weather_alert"],
     "international": ["wildfire", "volcano", "severe_storm", "flood",
                       "landslide", "snow", "drought", "sea_ice",
-                      "temp_extreme", "tropical_cyclone", "tsunami_warning"],
+                      "temp_extreme", "tropical_cyclone", "tsunami_warning",
+                      "conflict_event", "protest"],
     "space_weather": ["space_weather"],
 }
 

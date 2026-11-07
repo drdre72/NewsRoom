@@ -4,6 +4,8 @@ from .nws import NwsAdapter
 from .eonet import EonetAdapter
 from .gdacs import GdacsAdapter
 from .swpc import SwpcAdapter
+from .acled import AcledAdapter
+from .gdelt import GdeltAdapter
 
 _REGISTRY = {
     "usgs_geojson": UsgsAdapter,
@@ -11,6 +13,8 @@ _REGISTRY = {
     "nasa_eonet": EonetAdapter,
     "gdacs": GdacsAdapter,
     "noaa_swpc": SwpcAdapter,
+    "acled": AcledAdapter,
+    "gdelt": GdeltAdapter,
 }
 
 

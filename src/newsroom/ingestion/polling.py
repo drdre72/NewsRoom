@@ -31,6 +31,13 @@ def poll_once(conn: sqlite3.Connection, settings: Settings, ingest) -> dict:
     ua = settings.get("polling.user_agent", "newsroom/0.1")
     report: dict = {"sources": {}, "new_items": 0, "revisions": 0, "errors": []}
     for name, cfg in enabled_sources(settings):
+        missing_env = [v for v in cfg.get("requires_env", [])
+                       if not __import__("os").environ.get(v)]
+        if missing_env:
+            report["sources"][name] = {
+                "ok": True, "skipped": "credentials",
+                "missing_env": missing_env}
+            continue
         interval = cfg.get("poll_every_seconds")
         if interval:
             # Per-source cadence: skip when our newest stored observation is
@@ -45,7 +52,9 @@ def poll_once(conn: sqlite3.Connection, settings: Settings, ingest) -> dict:
                 continue
         try:
             adapter = adapter_for(cfg["kind"], name, cfg)
-            result = adapter.fetch(timeout=timeout, user_agent=ua)
+            result = adapter.fetch(
+                timeout=int(cfg.get("timeout_seconds", timeout)),
+                user_agent=ua)
             items = 0
             for body in result.payloads:
                 for item in adapter.split_items(body):

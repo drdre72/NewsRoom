@@ -46,6 +46,29 @@ sources:
     poll_feed: alerts
     poll_every_seconds: 900
 
+  acled:
+    kind: acled
+    authority: 0.85
+    enabled: true
+    requires_env: [ACLED_API_KEY, ACLED_EMAIL]   # free at developer.acleddata.com
+    poll_every_seconds: 3600
+    limit: 200
+    feeds:
+      read: https://api.acleddata.com/acled/read
+
+  gdelt:
+    kind: gdelt
+    authority: 0.7
+    enabled: true
+    feeds:
+      lastupdate: https://api.gdeltproject.org/gdeltv2/lastupdate.txt
+    poll_feed: lastupdate
+    poll_every_seconds: 1800
+    timeout_seconds: 90          # export zip is ~10MB
+    quad_classes: ["3", "4"]     # verbal + material conflict only
+    min_num_sources: 2
+    max_items: 300
+
 # Cross-source event fusion (§16)
 fusion:
   time_window_seconds: 300
