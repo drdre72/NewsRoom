@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; background: #0b1220; }
+  #map { width: 100vw; height: 100vh; }
+  .maplibregl-ctrl-attrib { display: none; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+window.__ready = false;
+window.__idle = false;
+window.__shot = null;
+
+// Boot: renderer injects maplibre-gl.js from local node_modules, then
+// calls __initMap with an offline style (no external tile endpoints).
+window.__initMap = async function (configJson) {
+  const cfg = JSON.parse(configJson);
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = cfg.maplibrePath;
+    s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = cfg.maplibrePath.replace('maplibre-gl.js', 'maplibre-gl.css');
+  document.head.appendChild(link);
+
+  window.__map = new maplibregl.Map({
+    container: 'map', style: cfg.style,
+    interactive: false, attributionControl: false,
+    center: [0, 20], zoom: 1,
+  });
+  window.__map.on('idle', () => { window.__idle = true; });
+  window.__map.on('load', () => { window.__idle = true; });
+};
+
+window.__setShot = function (paramsJson) {
+  window.__idle = false;
+  const p = JSON.parse(paramsJson);
+  window.__shot = p;
+  const map = window.__map;
+  if (p.lat !== undefined && p.lon !== undefined) {
+    map.jumpTo({ center: [p.lon, p.lat], zoom: p.zoom ?? 4 });
+  }
+  if (p.rings_km && p.lat !== undefined) {
+    const rings = { type: 'FeatureCollection', features:
+      p.rings_km.map(km => circleFeature(p.lon, p.lat, km)) };
+    if (map.getSource('rings')) map.getSource('rings').setData(rings);
+    else {
+      map.addSource('rings', { type: 'geojson', data: rings });
+      map.addLayer({ id: 'rings', type: 'line', source: 'rings',
+        paint: { 'line-color': '#38bdf8', 'line-width': 2 } });
+    }
+    const pt = { type: 'FeatureCollection', features: [
+      { type: 'Feature', geometry: { type: 'Point', coordinates: [p.lon, p.lat] } }] };
+    if (map.getSource('epi')) map.getSource('epi').setData(pt);
+    else {
+      map.addSource('epi', { type: 'geojson', data: pt });
+      map.addLayer({ id: 'epi', type: 'circle', source: 'epi',
+        paint: { 'circle-radius': 10, 'circle-color': '#ef4444',
+                 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } });
+    }
+  }
+};
+
+// Deterministic camera interpolation for animated shots (§21).
+window.__evalCamera = function (t) {
+  window.__idle = false;
+  const p = window.__shot || {};
+  const map = window.__map;
+  if (p.lat === undefined) { window.__idle = true; return; }
+  const ease = t * t * (3 - 2 * t);              // smoothstep
+  const zoom = (p.zoom_from ?? 1.5) + ((p.zoom ?? 4) - (p.zoom_from ?? 1.5)) * ease;
+  const lat = (p.lat_from ?? p.lat) + (p.lat - (p.lat_from ?? p.lat)) * ease;
+  const lon = (p.lon_from ?? p.lon) + (p.lon - (p.lon_from ?? p.lon)) * ease;
+  map.jumpTo({ center: [lon, lat], zoom });
+  // jumpTo is synchronous; idle fires next tick.
+  requestAnimationFrame(() => { window.__idle = true; });
+};
+
+function circleFeature(lon, lat, km, steps = 64) {
+  const coords = [];
+  for (let i = 0; i <= steps; i++) {
+    const a = (i / steps) * 2 * Math.PI;
+    const dLat = (km / 111.32) * Math.sin(a);
+    const dLon = (km / (111.32 * Math.cos(lat * Math.PI / 180))) * Math.cos(a);
+    coords.push([lon + dLon, lat + dLat]);
+  }
+  return { type: 'Feature', geometry: { type: 'LineString', coordinates: coords } };
+}
+
+window.__ready = true;
+</script>
+</body>
+</html>

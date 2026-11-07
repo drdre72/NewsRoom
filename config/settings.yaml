@@ -1,0 +1,65 @@
+# Core newsroom settings. Paths are relative to the project root unless absolute.
+
+project:
+  name: newsroom
+
+paths:
+  db: newsroom.db
+  logs: logs
+  cache: cache
+  output: output
+  fixtures: src/newsroom/sim/fixtures
+
+polling:
+  interval_seconds: 60
+  timeout_seconds: 20
+  user_agent: "newsroom/0.1 (local-first; contact: local)"
+
+storage:
+  cache_max_gb: 30
+  frame_retention_hours: 12
+  intermediate_retention_days: 3
+
+workers:
+  llm: 1
+  tts: 1
+  whisper: 1
+  map_render: 1
+  video_render: 1
+
+publishing:
+  automatic: false   # §66 — stays off until factual safety is proven
+
+llm:
+  provider: ollama
+  base_url: http://localhost:11434
+  model: ""            # set in models.yaml or env; empty = auto-detect first installed
+  max_concurrent_jobs: 1
+  timeout_seconds: 120
+  temperature: 0.2
+
+tts:
+  # Preference order. First available backend wins. "say" is a macOS-native
+  # development fallback; kokoro_mlx is the production target (§23).
+  backend_order: [kokoro_mlx, say]
+  voice: "af_heart"        # kokoro voice
+  say_voice: "Samantha"    # macOS fallback voice
+  sample_rate: 24000
+
+alignment:
+  whisper_binary: ""       # path to whisper-cli; empty = auto-detect
+  model_path: ""           # ggml model path for whisper.cpp
+
+video:
+  shorts:
+    width: 1080
+    height: 1920
+    fps: 30
+    max_duration_s: 60
+  longform:
+    width: 1920
+    height: 1080
+    fps: 30
+  encoder_preference: [h264_videotoolbox, libx264]
+  audio_codec: aac
+  audio_bitrate: 160k

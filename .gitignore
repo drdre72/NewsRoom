@@ -1,0 +1,21 @@
+# env / secrets — never commit (§77)
+.env
+*.pem
+*.key
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+dist/
+
+# Newsroom runtime state
+newsroom.db*
+logs/
+cache/
+output/
+node_modules/
+package-lock.json
+.DS_Store

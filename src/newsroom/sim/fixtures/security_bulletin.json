@@ -1,0 +1,1 @@
+{"id":"gov-sim-001","source":"OFFICIAL_BULLETIN","issued":"2026-11-07T14:00:00Z","severity":"high","headline":"Explosion reported at industrial facility, Example City","confirmed":["explosion_occurred","location"],"unconfirmed":["cause","casualties","responsible_party"],"note":"High-risk fields deliberately unconfirmed (spec section 15)."}

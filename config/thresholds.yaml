@@ -1,0 +1,49 @@
+# Deterministic scoring configuration (§13, §14).
+
+impact:
+  # Earthquake feature weights; each feature normalizes to 0..1 first.
+  earthquake:
+    magnitude:
+      weight: 0.45
+      min: 2.5        # mag <= min -> 0
+      max: 9.5        # mag >= max -> 1
+    significance:
+      weight: 0.25
+      min: 0
+      max: 1000
+    tsunami_flag:
+      weight: 0.15    # binary 0/1
+    alert_level:      # PAGER-style
+      weight: 0.15
+      values: {green: 0.2, yellow: 0.5, orange: 0.75, red: 1.0}
+    shallow_depth:
+      weight: 0.0     # reserved; depth_km <= 35 -> 1, <= 70 -> 0.5 else 0
+
+  levels:            # score -> level (first match wins, top-down)
+    FLASH: 0.85
+    BREAKING: 0.60
+    UPDATE: 0.35
+    NORMAL: 0.15
+    # below -> BACKGROUND
+
+confidence:
+  base_by_source:    # source authority -> base confidence
+    usgs: 0.95
+    nws: 0.95
+    eonet: 0.80
+    gdacs: 0.80
+    default: 0.50
+  reviewed_bonus: 0.05        # source marked event "reviewed"
+  corroboration_bonus: 0.05   # per extra corroborating source, max +0.10
+  max: 1.0
+  # Production eligibility gates (§14)
+  auto_publish_min: 0.95
+  corroborate_min: 0.70
+
+high_risk_fields:  # §15 — always require review, never auto-assert
+  - casualties
+  - fatalities
+  - injuries
+  - cause
+  - attribution
+  - perpetrator

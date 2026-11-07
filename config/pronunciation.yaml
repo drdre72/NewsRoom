@@ -1,0 +1,15 @@
+# Display -> speech overrides (§24, §25). Keys match case-insensitively as
+# whole words; display text is never mutated.
+
+overrides:
+  NHC: "N H C"
+  NOAA: "NOAH"
+  USGS: "U S G S"
+  NWS: "N W S"
+  NASA: "NASA"
+  GDACS: "G D A C S"
+  EONET: "E O net"
+  UTC: "U T C"
+  km: "kilometers"
+  km/h: "kilometers per hour"
+  MW: "moment magnitude"

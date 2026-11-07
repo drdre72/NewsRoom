@@ -1,0 +1,38 @@
+# Authoritative source registry (§78). Social media is never a fact source.
+
+sources:
+  usgs:
+    kind: usgs_geojson
+    authority: 1.0
+    enabled: true
+    feeds:
+      significant_hour: https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_hour.geojson
+      significant_week: https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_week.geojson
+      m4_5_week: https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week.geojson
+    poll_feed: significant_hour
+
+  nws:
+    kind: nws_cap
+    authority: 1.0
+    enabled: false       # Phase — second vertical slice (§86)
+    feeds:
+      alerts: https://api.weather.gov/alerts/active
+
+  eonet:
+    kind: nasa_eonet
+    authority: 0.9
+    enabled: false
+    feeds:
+      events: https://eonet.gsfc.nasa.gov/api/v3/events
+
+  gdacs:
+    kind: gdacs
+    authority: 0.9
+    enabled: false
+    feeds:
+      rss: https://www.gdacs.org/xml/rss.xml
+
+# Cross-source event fusion (§16)
+fusion:
+  time_window_seconds: 300
+  max_distance_km: 50.0

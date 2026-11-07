@@ -1,0 +1,29 @@
+# Simulation scenarios (§51, §53). Each feed item is applied in order with
+# virtual retrieved_at offsets so revision ordering is deterministic.
+
+earthquake_major:
+  description: Single significant USGS event, full render path.
+  render: true
+  items:
+    - {adapter: usgs, file: earthquake_major.geojson, at_offset_s: 0}
+
+earthquake_revision_sequence:
+  description: Same source event revised 3x — exercises fact supersession.
+  render: true
+  items:
+    - {adapter: usgs, file: earthquake_rev1.geojson, at_offset_s: 0}
+    - {adapter: usgs, file: earthquake_rev2.geojson, at_offset_s: 600}
+    - {adapter: usgs, file: earthquake_rev3.geojson, at_offset_s: 1800}
+
+malformed_payload:
+  description: Unparseable source item must be skipped, not crash.
+  render: false
+  items:
+    - {adapter: usgs, file: malformed.geojson, at_offset_s: 0}
+
+# Fixtures for adapter families landing in later phases (§53).
+nws_warning:            {description: "fixture only (NWS adapter is phase 2)", render: false, items: []}
+hurricane_advisory:     {description: "fixture only", render: false, items: []}
+wildfire_event:         {description: "fixture only", render: false, items: []}
+security_bulletin:      {description: "fixture only — high-risk fields omitted", render: false, items: []}
+source_outage:          {description: "simulated fetch failure; keeps last verified state", render: false, items: []}

@@ -1,0 +1,18 @@
+# Model selection. Never hardcode model names in code (§11).
+
+llm:
+  # Ordered preferences; first installed model wins when llm.model is empty
+  # in settings.yaml. Small 4B-8B quantized class for 16 GB Macs (§5).
+  preferred:
+    - qwen3:8b
+    - llama3.1:8b
+    - mistral:7b
+    - phi4-mini
+    - gemma3:4b
+
+tts:
+  kokoro_voice: af_heart
+  say_voice: Samantha
+
+whisper:
+  model: base.en   # small footprint for alignment duty
