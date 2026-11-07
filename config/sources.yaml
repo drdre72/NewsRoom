@@ -100,6 +100,21 @@ sources:
       CUSR0000SA0: {label: "CPI-U (SA)", units: "Index 1982-84=100", move_scale: 1.5}
       CES0500000003: {label: "Avg Hourly Earnings", units: "USD/hour", move_scale: 1.5}
 
+  eia:
+    kind: eia
+    authority: 0.95
+    enabled: true
+    requires_env: [EIA_API_KEY]      # free at eia.gov/opendata/register.php
+    poll_every_seconds: 3600         # weekly stocks land Wed/Thu mornings ET
+    feeds:
+      series: https://api.eia.gov/v2/seriesid/
+    poll_feed: series
+    series:                          # v2 seriesid path -> label/units/surprise scale
+      PET.WCESTUS1.W: {label: "US Crude Oil Stocks (excl. SPR)", units: "thousand barrels", move_scale: 3.0}
+      PET.WGTSTUS1.W: {label: "US Gasoline Stocks", units: "thousand barrels", move_scale: 3.0}
+      PET.WDISTUS1.W: {label: "US Distillate Stocks", units: "thousand barrels", move_scale: 4.0}
+      NG.NW2_EPG0_SWO_R48_BCF.W: {label: "US Natural Gas Storage (L48)", units: "Bcf", move_scale: 8.0}
+
 # Cross-source event fusion (§16)
 fusion:
   time_window_seconds: 300

@@ -167,6 +167,8 @@ def _script_from_template(
         return _weather_template(ctx, settings)
     if ctx.event_type == "earthquake":
         return _earthquake_template(ctx, settings)
+    if ctx.event_type == "economic_indicator":
+        return _econ_template(ctx, settings)
     return _eonet_template(ctx, settings)
 
 
@@ -273,6 +275,55 @@ def _eonet_template(ctx: FactContext, settings: Settings) -> Script:
         f"{kind} — {place.value_display}" if cat and place else
         (title_f.value_display if title_f else f"{kind} bulletin")
     )
+    return Script(headline=headline, segments=segs, generator="template",
+                  event_id=ctx.event_id, revision=ctx.revision)
+
+
+def _econ_template(ctx: FactContext, settings: Settings) -> Script:
+    """Economic releases (FRED/BLS/EIA): the print, the period, the move.
+    All numbers come from value_display verbatim — the validator's numeric
+    traceability rule requires claim figures to match ledger values."""
+    f, segs, add = _template_parts(ctx, settings)
+
+    label = f.get("series_label")
+    val = f.get("severity")            # the print itself lands in severity
+    units = f.get("units")
+    period = f.get("period_name") or f.get("value_date")
+    if label and val:
+        refs = ["series_label", "severity"]
+        text = f"{label.value_display} came in at {val.value_display}"
+        if units:
+            text += f" {units.value_display}"
+            refs.append("units")
+        if period:
+            text += f" for {period.value_display}."
+            refs.append(period.field)
+        else:
+            text += "."
+        add(text, *refs)
+
+    delta = f.get("delta")
+    dpct = f.get("delta_pct")
+    prev = f.get("previous_value")
+    if dpct and prev:
+        refs = ["delta_pct", "previous_value"]
+        text = (f"That compares with {prev.value_display}"
+                + (f" {units.value_display}" if units else "")
+                + " in the previous reading — a move of "
+                  f"{dpct.value_display} percent.")
+        if units:
+            refs.append("units")
+        add(text, *refs)
+    elif delta and units:
+        add(f"The change from the previous reading was "
+            f"{delta.value_display} {units.value_display}.",
+            "delta", "units")
+
+    _revision_segments(ctx, add)
+    _developing_close(add)
+
+    headline = (f"{label.value_display}" if label else
+                "Economic data bulletin")
     return Script(headline=headline, segments=segs, generator="template",
                   event_id=ctx.event_id, revision=ctx.revision)
 

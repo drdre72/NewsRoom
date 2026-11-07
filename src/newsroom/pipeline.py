@@ -191,6 +191,8 @@ def ingest_observation(
         # stay comparable across sources.
         if norm.fields.get("alert_event"):
             event.extra["alert_event"] = norm.fields["alert_event"]
+        if norm.fields.get("series_id"):
+            event.extra["series_id"] = norm.fields["series_id"]
 
         impact_score, level = score_impact(event.event_type, merged_snapshot,
                                            load_settings())

@@ -56,6 +56,17 @@ def should_fuse(
             getattr(candidate, "extra", {}).get("alert_event") or "").lower()
         if alert and cand_alert and alert != cand_alert:
             return False, f"different alert type '{alert}' vs '{cand_alert}'"
+    # Economic series share a release period (occurred_at) and carry no geo —
+    # without this guard every same-period print fuses into one event. An
+    # unset candidate series also vetoes: same-series corroboration is the
+    # only fusion this family ever wants.
+    if obs.event_type == "economic_indicator":
+        sid = (obs.fields.get("series_id") or "").lower()
+        cand_sid = str(
+            getattr(candidate, "extra", {}).get("series_id") or "").lower()
+        if sid and sid != cand_sid:
+            return False, \
+                f"different series '{sid}' vs '{cand_sid or 'unset'}'"
     gap = time_gap_seconds(obs.occurred_at, candidate.occurred_at or candidate.first_seen)
     if gap is not None and gap > time_window_s:
         return False, f"time gap {gap:.0f}s > {time_window_s:.0f}s"

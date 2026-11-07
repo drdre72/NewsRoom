@@ -41,7 +41,7 @@ def display_value(field: str, value: Any) -> str:
         return "unknown"
     if field in ("occurred_at", "effective", "onset", "expires", "ends"):
         return _iso_to_display(value)
-    if field in ("severity", "magnitude"):
+    if field in ("severity", "magnitude", "previous_value"):
         try:
             v = float(value)
             return f"{v:,.0f}" if abs(v) >= 1000 else f"{v:.1f}"
