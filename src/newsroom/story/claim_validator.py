@@ -19,6 +19,10 @@ from ..config import Settings
 from ..models.fact import Fact
 from ..models.story import Script
 from .context_builder import FactContext
+from .script_generator import (
+    _BACKGROUND_BY_TYPE, _BACKGROUND_GENERIC, _DEVELOPING_CLOSE,
+    _MONITORING_COPY,
+)
 
 # Words that trigger high-risk scrutiny (§15). If present and no cited fact
 # carries them, the segment is rejected.
@@ -38,22 +42,13 @@ def _extract_numbers(text: str) -> list[str]:
     return [m.group(0) for m in _NUM_RE.finditer(text)]
 
 
-# Background context about an event type (long-form explainer) makes no
-# event-specific factual claim — it explains the category ("Tropical
-# cyclones are rated by sustained wind speed"). These segments are
-# exempt from the per-segment citation requirement.
-_TYPE_BACKGROUND_MARKERS = (
-    "earthquakes occur", "national weather service issues",
-    "wildfires are tracked", "tropical cyclones are rated",
-    "space weather storms are rated", "conflict event data",
-    "economic indicators are released", "fema declarations authorize",
-    "known exploited vulnerabilities catalog", "the magnitude scale",
-)
-
-
-def _is_type_background(text: str) -> bool:
-    low = text.lower()
-    return any(m in low for m in _TYPE_BACKGROUND_MARKERS)
+def _is_approved_uncited_copy(script: Script, ctx: FactContext, text: str) -> bool:
+    if script.generator == "longform:template":
+        return text in (
+            _BACKGROUND_BY_TYPE.get(ctx.event_type, _BACKGROUND_GENERIC),
+            _DEVELOPING_CLOSE, _MONITORING_COPY,
+        )
+    return script.generator == "template" and text == _DEVELOPING_CLOSE
 
 
 def _num_key(token: str) -> float | None:
@@ -90,7 +85,6 @@ def validate_script(
 ) -> tuple[bool, list[str]]:
     errors: list[str] = []
     known = ctx.fact_by_id()
-    fact_number_keys = _fact_number_keys(ctx.all_facts or ctx.current)
     risk_fields = set(settings.get("high_risk_fields", []) or [])
 
     if not script.segments:
@@ -103,15 +97,8 @@ def validate_script(
         bad = [fid for fid in seg.fact_ids if fid not in known]
         if bad:
             errors.append(f"segment {i}: cites unknown fact ids {bad}")
-        if not cited and not any(
-                phrase in seg.text.lower()
-                for phrase in ("developing story", "will continue to monitor",
-                               "revisions will be reported")):
-            # Background context about an event type (not the event itself)
-            # is exempt too: "Tropical cyclones are rated by sustained wind
-            # speed" makes no event-specific claim needing citation.
-            if not _is_type_background(seg.text):
-                errors.append(f"segment {i}: no valid fact citations")
+        if not cited and not _is_approved_uncited_copy(script, ctx, seg.text):
+            errors.append(f"segment {i}: no valid fact citations")
 
         cited_fields = {known[fid].field for fid in cited}
         hit = _high_risk_hit(seg.text)
@@ -128,6 +115,7 @@ def validate_script(
                 errors.append(
                     f"segment {i}: high-risk claim '{hit}' unsupported by cited facts")
 
+        fact_number_keys = _fact_number_keys([known[fid] for fid in cited])
         for num in _extract_numbers(seg.text):
             if _BENIGN_NUMBERS.match(num):
                 continue

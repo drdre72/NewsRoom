@@ -17,6 +17,7 @@ from typing import Iterable
 
 from .base import SourceAdapter, FetchResult
 from ...models.observation import NormalizedObservation
+from ...security import fetch_bytes
 from .nws import _iso
 
 _READ_URL = "https://api.acleddata.com/acled/read"
@@ -48,8 +49,7 @@ class AcledAdapter(SourceAdapter):
                 q[opt] = self.config[opt]
         url = f"{_READ_URL}?{urllib.parse.urlencode(q)}"
         req = urllib.request.Request(url, headers={"User-Agent": user_agent})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            body = resp.read().decode("utf-8")
+        body = fetch_bytes(req, timeout=timeout).decode("utf-8")
         return FetchResult(feed_url=url.split("?")[0] + "?[key+email]",
                            retrieved_at=utcnow(), payloads=[body])
 

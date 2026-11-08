@@ -15,6 +15,7 @@ from typing import Iterable
 
 from .base import SourceAdapter, FetchResult
 from ...models.observation import NormalizedObservation
+from ...security import fetch_bytes
 
 _BASE = "https://api.coinbase.com/v2/prices"
 
@@ -30,8 +31,7 @@ class CoinbaseAdapter(SourceAdapter):
         for pair, meta in pairs.items():
             url = f"{_BASE}/{pair}/spot"
             req = urllib.request.Request(url, headers={"User-Agent": user_agent})
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                doc = json.loads(resp.read().decode("utf-8"))
+            doc = json.loads(fetch_bytes(req, timeout=timeout).decode("utf-8"))
             payloads.append(json.dumps(
                 {"pair": pair,
                  "label": meta.get("label", pair),

@@ -15,6 +15,7 @@ from typing import Iterable
 
 from .base import SourceAdapter, FetchResult
 from ...models.observation import NormalizedObservation
+from ...security import fetch_bytes
 
 
 class CisaAdapter(SourceAdapter):
@@ -25,8 +26,7 @@ class CisaAdapter(SourceAdapter):
         from ...storage.repositories import utcnow
         url = self.feed_url()
         req = urllib.request.Request(url, headers={"User-Agent": user_agent})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            doc = json.loads(resp.read().decode("utf-8"))
+        doc = json.loads(fetch_bytes(req, timeout=timeout).decode("utf-8"))
         lookback = int(self.config.get("lookback_days", 2))
         cutoff = datetime.now(timezone.utc).date() - timedelta(days=lookback)
         payloads = []

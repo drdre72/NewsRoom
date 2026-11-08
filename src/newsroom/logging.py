@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .paths import logs_dir
+from .security import redact_error
 
 _CONFIGURED = False
 
@@ -53,6 +54,9 @@ def configure(level: int = logging.INFO, json_file: bool = True) -> None:
     root.propagate = False
 
     console = logging.StreamHandler(sys.stderr)
+    # launchd stderr is an unbounded file. INFO remains available in the
+    # bounded JSON log without growing core.err.log on every observation.
+    console.setLevel(logging.WARNING)
     console.setFormatter(_ConsoleFormatter())
     root.addHandler(console)
 
@@ -87,4 +91,7 @@ def get_logger(component: str) -> logging.LoggerAdapter:
 
 
 def log_event(logger: logging.LoggerAdapter, level: int, msg: str, **fields: Any) -> None:
+    for key in ("error", "detail", "feed", "url"):
+        if key in fields and isinstance(fields[key], str):
+            fields[key] = redact_error(fields[key])
     logger.log(level, msg, extra={"fields": fields})

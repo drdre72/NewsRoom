@@ -155,8 +155,7 @@ def _revision_segments(ctx: FactContext, add) -> None:
 
 
 def _developing_close(add) -> None:
-    add("This is a developing story. Details will be updated as official "
-        "sources revise their reports.")
+    add(_DEVELOPING_CLOSE)
 
 
 # -- long-form explainer (§18) --------------------------------------------
@@ -212,6 +211,12 @@ _BACKGROUND_GENERIC = (
     "This event is being monitored by the autonomous newsroom. "
     "Information is sourced from authoritative feeds and verified "
     "against the fact ledger.")
+_DEVELOPING_CLOSE = (
+    "This is a developing story. Details will be updated as official "
+    "sources revise their reports.")
+_MONITORING_COPY = (
+    "We will continue to monitor authoritative sources for "
+    "updates. Revisions will be reported as they are confirmed.")
 
 
 def generate_longform_script(
@@ -297,14 +302,11 @@ def generate_longform_script(
         sources = [s for s in (event.source_ids or [])
                    if s and s != (f.get("title", "").value
                                    if f.get("title") else None)]
-        if len(sources) > 1:
-            _mark_chapter("Source Corroboration")
-            add("This event has been confirmed by multiple independent "
-                "authoritative sources.")
-            src_url = f.get("source_url")
-            if src_url:
-                add(f"Source data is available at {src_url.value_display}.",
-                    "source_url")
+        src_url = f.get("source_url")
+        if len(sources) > 1 and src_url:
+            _mark_chapter("Source Records")
+            add(f"The latest source record is available at "
+                f"{src_url.value_display}.", "source_url")
             cat_title = f.get("category_title")
             if cat_title:
                 add(f"The event is categorized as "
@@ -352,8 +354,7 @@ def generate_longform_script(
     # -- Chapter 10: What to Watch
     if "what_to_watch" in plan.sections:
         _mark_chapter("What to Watch")
-        add("We will continue to monitor authoritative sources for "
-            "updates. Revisions will be reported as they are confirmed.")
+        add(_MONITORING_COPY)
 
     # -- Final chapter: Close
     _mark_chapter("Closing")

@@ -128,7 +128,7 @@ def test_coinbase_fetch_failure_is_visible(monkeypatch):
     def fail(*args, **kwargs):
         raise OSError("source unavailable")
 
-    monkeypatch.setattr("urllib.request.urlopen", fail)
+    monkeypatch.setattr("newsroom.ingestion.adapters.coinbase.fetch_bytes", fail)
     adapter = _adapter(CoinbaseAdapter, "coinbase",
                        {"pairs": {"BTC-USD": {"label": "Bitcoin"}}})
     with pytest.raises(OSError, match="source unavailable"):

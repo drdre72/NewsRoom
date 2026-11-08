@@ -20,7 +20,7 @@ from .logging import configure as configure_logging, get_logger, log_event
 log = get_logger("cli")
 
 
-def _conn_and_settings(args):
+def _conn_and_settings(args, recover: bool = False):
     from .config import load_settings
     from .paths import ensure_runtime_dirs
     from .storage.database import connect, integrity_check, migrate, recover_jobs
@@ -28,7 +28,7 @@ def _conn_and_settings(args):
     ensure_runtime_dirs()
     conn = connect()
     migrate(conn)
-    recovered = recover_jobs(conn)
+    recovered = recover_jobs(conn) if recover else 0
     if recovered:
         log_event(log, 30, "requeued jobs after unclean shutdown",
               count=recovered)
@@ -41,14 +41,17 @@ def cmd_doctor(args) -> int:
 
 
 def cmd_status(args) -> int:
-    from .intelligence.freshness import feed_status
+    from .intelligence.source_health import source_statuses
+    from .storage.retention import disk_health, retention_audit
     from .storage.database import integrity_check
     from .storage import repositories as repo
     conn, settings = _conn_and_settings(args)
     status = {
         "db": integrity_check(conn),
         "jobs": repo.queue_depth(conn),
-        "feeds": [feed_status(conn, s) for s in ("usgs", "nws", "eonet", "gdacs")],
+        "feeds": source_statuses(settings),
+        "disk": disk_health(settings),
+        "retention": retention_audit(settings),
         "events": [
             {"event_id": e.event_id, "type": e.event_type,
              "revision": e.current_revision, "impact": e.impact_level,
@@ -65,10 +68,12 @@ def cmd_status(args) -> int:
               f"events={db['count_events']} facts={db['count_facts']} "
               f"obs={db['count_observations']}")
         print(f"jobs: {status['jobs']}")
+        print(f"disk: free={status['disk']['free_gb']} GiB "
+              f"min={status['disk']['min_free_gb']} GiB")
         for f in status["feeds"]:
             age = f["age_seconds"]
             age_s = "never" if age is None else f"{int(age)}s ago"
-            print(f"feed {f['source']:<6} {f['status']:<8} last={age_s}")
+            print(f"feed {f['source']:<10} {f['status']:<12} last={age_s}")
         for e in status["events"]:
             print(f"{e['event_id']:<32} r{e['revision']:<3} "
                   f"{e['impact']:<10} impact={e['impact_score']:<5} "
@@ -92,8 +97,8 @@ def cmd_run(args) -> int:
     from .ingestion.polling import poll_once
     from .pipeline import ingest_observation
     from .service import ServiceLoop
-    conn, settings = _conn_and_settings(args)
     once = args.once or not args.poll
+    conn, settings = _conn_and_settings(args, recover=not once)
     if once:
         report = poll_once(conn, settings, ingest_observation)
         print(json.dumps(report, indent=2))

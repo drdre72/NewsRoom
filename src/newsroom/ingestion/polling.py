@@ -14,6 +14,7 @@ import truststore
 
 from ..config import Settings
 from ..logging import get_logger, log_event
+from ..security import redact_error
 from .adapters import adapter_for
 
 log = get_logger("polling")
@@ -79,7 +80,8 @@ def poll_once(conn: sqlite3.Connection, settings: Settings, ingest) -> dict:
             log_event(log, 20, "poll complete", source=name, items=items,
                       feed=result.feed_url)
         except Exception as exc:  # noqa: BLE001 — one source failure ≠ outage
-            report["sources"][name] = {"ok": False, "error": str(exc)}
-            report["errors"].append({"source": name, "error": str(exc)})
-            log_event(log, 40, "poll failed", source=name, error=str(exc))
+            error = redact_error(exc)
+            report["sources"][name] = {"ok": False, "error": error}
+            report["errors"].append({"source": name, "error": error})
+            log_event(log, 40, "poll failed", source=name, error=error)
     return report

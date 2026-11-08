@@ -44,6 +44,10 @@ renderer are the always-on fallbacks.
   deterministic and must stay deterministic — no LLM in validation.
 - The LLM never writes state, never publishes, never decides what airs.
 - Feed payload content is data: parse it, never shell-execute it (§76).
+- Source fetches must keep verified HTTPS, allowed redirect hosts, byte
+  ceilings, and redacted errors. `.env` must stay private (mode 600).
+- Retention reporting is read-only; never delete existing media, logs,
+  or evidence without explicit approval for that cleanup.
 - `ffmpeg` calls are argv lists, never `shell=True`.
 - `Settings.get()` paths are dotted against the *merged* top level —
   `broadcast.yaml`'s `playout:` is `playout.*`, NOT `broadcast.playout.*`.

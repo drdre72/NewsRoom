@@ -17,6 +17,7 @@ polling:
 
 storage:
   cache_max_gb: 30
+  min_free_gb: 10     # stop heavy renders before the Mac runs out of space
   frame_retention_hours: 12
   intermediate_retention_days: 3
 

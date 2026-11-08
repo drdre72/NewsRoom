@@ -14,6 +14,7 @@ from typing import Iterable
 
 from .base import SourceAdapter, FetchResult
 from ...models.observation import NormalizedObservation
+from ...security import fetch_bytes
 
 _API = "https://api.bls.gov/publicAPI/v2/timeseries/data/"
 
@@ -33,9 +34,8 @@ class BlsAdapter(SourceAdapter):
             _API, data=json.dumps(body).encode(),
             headers={"User-Agent": user_agent,
                      "Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return FetchResult(feed_url=_API, retrieved_at=utcnow(),
-                               payloads=[resp.read().decode("utf-8")])
+        return FetchResult(feed_url=_API, retrieved_at=utcnow(),
+                           payloads=[fetch_bytes(req, timeout=timeout).decode("utf-8")])
 
     def split_items(self, body: str) -> Iterable[str]:
         doc = json.loads(body)

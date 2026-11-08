@@ -37,6 +37,13 @@ window.__initMap = async function (configJson) {
   });
   window.__map.on('idle', () => { window.__idle = true; });
   window.__map.on('load', () => { window.__idle = true; });
+  // Playwright awaits __initMap before __setShot; MapLibre rejects addSource
+  // until the initial style has finished loading.
+  await new Promise((resolve, reject) => {
+    window.__map.once('load', resolve);
+    window.__map.once('error', e => reject(
+      new Error(e.error?.message || 'MapLibre style failed to load')));
+  });
 };
 
 window.__setShot = function (paramsJson) {

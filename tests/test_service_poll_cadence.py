@@ -6,6 +6,7 @@ from newsroom.service import ServiceLoop
 
 def test_run_polls_between_queued_renders(conn, settings, monkeypatch):
     from newsroom.ingestion import polling
+    from newsroom.intelligence import source_health
     from newsroom.storage import repositories as repo
 
     queue = [
@@ -16,6 +17,7 @@ def test_run_polls_between_queued_renders(conn, settings, monkeypatch):
     polls, rendered, completed = [], [], []
     monkeypatch.setattr(polling, "poll_once",
                         lambda *args: polls.append("poll") or {"errors": []})
+    monkeypatch.setattr(source_health, "record_poll", lambda *args: None)
     monkeypatch.setattr(repo, "claim_next_job",
                         lambda conn: queue.pop(0) if queue else None)
     monkeypatch.setattr(repo, "complete_job",
@@ -33,3 +35,25 @@ def test_run_polls_between_queued_renders(conn, settings, monkeypatch):
     assert rendered == ["event:0", "event:1"]
     assert completed == ["0", "1"]
     assert [job.event_id for job in queue] == ["event:2"]
+
+
+def test_status_connection_does_not_recover_active_core_job(conn, monkeypatch):
+    from types import SimpleNamespace
+    from newsroom.cli import _conn_and_settings
+
+    conn.execute(
+        "INSERT INTO jobs (job_id,job_type,status,priority,created_at)"
+        " VALUES ('active','SHORT_RENDER','running',30,'2026-11-07')")
+    args = SimpleNamespace()
+    other, _ = _conn_and_settings(args)
+    try:
+        assert other.execute(
+            "SELECT status FROM jobs WHERE job_id='active'").fetchone()[0] == "running"
+        core, _ = _conn_and_settings(args, recover=True)
+        try:
+            assert core.execute(
+                "SELECT status FROM jobs WHERE job_id='active'").fetchone()[0] == "queued"
+        finally:
+            core.close()
+    finally:
+        other.close()

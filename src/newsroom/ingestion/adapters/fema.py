@@ -16,6 +16,7 @@ from typing import Iterable
 
 from .base import SourceAdapter, FetchResult
 from ...models.observation import NormalizedObservation
+from ...security import fetch_bytes
 
 _BASE = ("https://www.fema.gov/api/open/v2/"
          "DisasterDeclarationsSummaries")
@@ -37,8 +38,7 @@ class FemaAdapter(SourceAdapter):
             {"$orderby": "declarationDate desc", "$top": top})
         url = f"{_BASE}?{q}"
         req = urllib.request.Request(url, headers={"User-Agent": user_agent})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            doc = json.loads(resp.read().decode("utf-8"))
+        doc = json.loads(fetch_bytes(req, timeout=timeout).decode("utf-8"))
         rows = doc.get("DisasterDeclarationsSummaries") or []
         # One payload per declaration — rows are per designated county.
         decls: dict[str, dict] = {}

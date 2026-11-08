@@ -15,6 +15,7 @@ from typing import Iterable
 
 from .base import SourceAdapter, FetchResult
 from ...models.observation import NormalizedObservation
+from ...security import fetch_bytes
 
 _BASE = ("https://api.fiscaldata.treasury.gov/services/api/"
          "fiscal_service/v2/accounting/od/avg_interest_rates")
@@ -37,8 +38,7 @@ class TreasuryAdapter(SourceAdapter):
             })
             url = f"{_BASE}?{q}"
             req = urllib.request.Request(url, headers={"User-Agent": user_agent})
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                doc = json.loads(resp.read().decode("utf-8"))
+            doc = json.loads(fetch_bytes(req, timeout=timeout).decode("utf-8"))
             rows = doc.get("data") or []
             payloads.append(json.dumps(
                 {"security_desc": sec_desc,

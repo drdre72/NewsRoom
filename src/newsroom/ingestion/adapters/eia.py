@@ -15,6 +15,7 @@ from typing import Iterable
 
 from .base import SourceAdapter, FetchResult
 from ...models.observation import NormalizedObservation
+from ...security import fetch_bytes
 
 _BASE = "https://api.eia.gov/v2/seriesid/"
 
@@ -34,8 +35,7 @@ class EiaAdapter(SourceAdapter):
                 {"api_key": key, "length": 2})
             url = f"{_BASE}{urllib.parse.quote(sid)}?{q}"
             req = urllib.request.Request(url, headers={"User-Agent": user_agent})
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                doc = json.loads(resp.read().decode("utf-8"))
+            doc = json.loads(fetch_bytes(req, timeout=timeout).decode("utf-8"))
             if doc.get("error"):
                 raise RuntimeError(f"EIA {sid}: {doc['error']}")
             resp_doc = doc.get("response") or {}

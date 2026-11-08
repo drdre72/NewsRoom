@@ -14,6 +14,7 @@ from typing import Iterable
 
 from .base import SourceAdapter, FetchResult
 from ...models.observation import NormalizedObservation
+from ...security import fetch_bytes
 
 _BASE = "https://www.nhc.noaa.gov/CurrentStorms.json"
 
@@ -37,8 +38,7 @@ class NhcAdapter(SourceAdapter):
     def fetch(self, timeout: int = 20, user_agent: str = "newsroom/0.1") -> FetchResult:
         from ...storage.repositories import utcnow
         req = urllib.request.Request(_BASE, headers={"User-Agent": user_agent})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            doc = json.loads(resp.read().decode("utf-8"))
+        doc = json.loads(fetch_bytes(req, timeout=timeout).decode("utf-8"))
         storms = doc.get("activeStorms") or []
         payloads = [json.dumps(s) for s in storms]
         return FetchResult(feed_url=_BASE, retrieved_at=utcnow(),

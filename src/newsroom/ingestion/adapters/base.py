@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 from ...models.observation import NormalizedObservation
+from ...security import fetch_bytes
 
 
 @dataclass
@@ -38,8 +39,7 @@ class SourceAdapter:
         from ...storage.repositories import utcnow
         url = self.feed_url()
         req = urllib.request.Request(url, headers={"User-Agent": user_agent})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            body = resp.read().decode("utf-8")
+        body = fetch_bytes(req, timeout=timeout).decode("utf-8")
         return FetchResult(feed_url=url, retrieved_at=utcnow(), payloads=[body])
 
     def split_items(self, body: str) -> Iterable[str]:

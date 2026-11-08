@@ -19,9 +19,11 @@ from typing import Iterable
 
 from .base import SourceAdapter, FetchResult
 from ...models.observation import NormalizedObservation
+from ...security import fetch_bytes, read_limited
 from .nws import _iso
 
 _LASTUPDATE = "https://api.gdeltproject.org/gdeltv2/lastupdate.txt"
+_GDELT_HOSTS = {"api.gdeltproject.org", "data.gdeltproject.org"}
 
 # GDELT 2.0 Events TSV column positions (0-indexed, per the codebook).
 _C = dict(gid=0, day=1, actor1_name=6, actor1_country=7, actor2_name=16,
@@ -41,8 +43,9 @@ class GdeltAdapter(SourceAdapter):
         from ...storage.repositories import utcnow
         req = urllib.request.Request(_LASTUPDATE,
                                      headers={"User-Agent": user_agent})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            listing = resp.read().decode("utf-8")
+        listing = fetch_bytes(req, timeout=timeout,
+                              allowed_hosts=_GDELT_HOSTS,
+                              max_bytes=64 * 1024).decode("utf-8")
         export_url = next(
             (ln.split()[-1] for ln in listing.splitlines()
              if ".export.CSV.zip" in ln), None)
@@ -50,12 +53,11 @@ class GdeltAdapter(SourceAdapter):
             raise RuntimeError("no .export.CSV.zip in lastupdate.txt")
         req = urllib.request.Request(export_url,
                                      headers={"User-Agent": user_agent})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            blob = resp.read()
+        blob = fetch_bytes(req, timeout=timeout, allowed_hosts=_GDELT_HOSTS)
         with zipfile.ZipFile(io.BytesIO(blob)) as zf:
             with zf.open(zf.namelist()[0]) as fh:
-                tsv = io.TextIOWrapper(fh, encoding="utf-8",
-                                       errors="replace").read()
+                tsv = read_limited(fh, 96 * 1024 * 1024).decode(
+                    "utf-8", errors="replace")
         return FetchResult(feed_url=export_url, retrieved_at=utcnow(),
                            payloads=[tsv])
 

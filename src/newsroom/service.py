@@ -36,6 +36,7 @@ class ServiceLoop:
 
     def run(self, interval: int) -> None:
         from .ingestion.polling import poll_once
+        from .intelligence.source_health import record_poll
         from .pipeline import ingest_observation
         self.install_signal_handlers()
         log_event(log, 20, "core service started", interval=interval)
@@ -43,6 +44,7 @@ class ServiceLoop:
             cycle_started = time.monotonic()
             try:
                 report = poll_once(self.conn, self.settings, ingest_observation)
+                record_poll(self.settings, report, conn=self.conn)
                 if report["errors"]:
                     log_event(log, 30, "poll cycle had errors",
                               errors=len(report["errors"]))
@@ -65,6 +67,10 @@ class ServiceLoop:
     def drain_jobs(self, max_jobs: int | None = None) -> None:
         """Run queued jobs serially; optionally yield to the next poll."""
         from .storage import repositories as repo
+        from .storage.retention import disk_health
+        if not disk_health(self.settings)["ok"]:
+            log_event(log, 40, "render paused: low disk space")
+            return
         processed = 0
         while not self._stop:
             if max_jobs is not None and processed >= max_jobs:

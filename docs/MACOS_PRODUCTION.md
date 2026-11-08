@@ -107,6 +107,31 @@ the broadcast process holds an `flock` on `output/preview/director.lock`;
 a second `main.py broadcast` exits immediately rather than corrupt the
 playlist.
 
+### Continuous-operation safeguards
+
+- Source fetches use verified HTTPS with macOS trust roots, an approved
+  redirect host, and bounded response bodies (including decompressed
+  GDELT exports). Feed data cannot supply an arbitrary download URL.
+  Errors are redacted before logging, including API keys in query strings.
+- `.env` must be a regular file with mode 600. The local preview binds
+  only to loopback, serves only HLS/state/health resources, and inserts
+  source-derived titles as text rather than HTML. External RTMP and
+  automatic publishing remain disabled.
+- `logs/source_health.json` is a private, atomically replaced poll
+  snapshot. `python main.py status` and `/status.json` report every enabled
+  source from actual fetch results, not merely the age of a stored event.
+  The status `ok` is false for a failed/stale source or low disk; expected
+  missing credentials are shown separately.
+- Below `storage.min_free_gb` (10 GiB by default), the core keeps polling
+  but does not claim another heavy render. `python main.py --json status`
+  includes a **read-only** expiry audit for temporary frames/audio/shots.
+  The retention values in `config/settings.yaml` do not delete files:
+  approve a specific cleanup policy before enabling any deletion.
+- Routine INFO records go to the rotating JSON log; launchd stderr
+  receives WARNING and ERROR only. Historical stderr files are not
+  truncated by this policy. The broadcast owns and trims its live HLS
+  window separately.
+
 ### Outbound network filters
 
 If `logs/core.err.log` reports `[Errno 9] Bad file descriptor` for every
@@ -124,8 +149,9 @@ to the uv-managed `python3.12` under
 `/Users/andrebaker/.local/share/uv/python/`. Approve the actual Python
 process if TripMode lists it by that resolved path. Do not disable the
 network filter globally or turn off TLS verification. Once allowed,
-confirm that `logs/core.err.log` shows `poll complete` for sources rather
-than repeated socket errors; the core agent already retries every cycle.
+confirm `poll complete` in `logs/newsroom.jsonl` or healthy sources in
+`python main.py status`, rather than repeated socket errors; the core
+agent already retries every cycle.
 `doctor` checks local dependencies, not launchd outbound permission.
 
 ### Local preview
