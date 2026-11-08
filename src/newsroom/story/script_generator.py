@@ -206,6 +206,10 @@ _BACKGROUND_BY_TYPE = {
         "CISA lists flaws that are being actively exploited in the "
         "wild. Federal agencies are bound by a Binding Operational "
         "Directive to remediate by a specified deadline."),
+    "news_report": (
+        "Press reports are attributed coverage: the outlet states the "
+        "claim, and the newsroom relays it with attribution rather than "
+        "asserting it as independently verified fact."),
 }
 _BACKGROUND_GENERIC = (
     "This event is being monitored by the autonomous newsroom. "
@@ -384,7 +388,32 @@ def _script_from_template(
         return _fema_template(ctx, settings)
     if ctx.event_type == "cyber_advisory":
         return _cisa_template(ctx, settings)
+    if ctx.event_type == "news_report":
+        return _news_template(ctx, settings)
     return _eonet_template(ctx, settings)
+
+
+def _news_template(ctx: FactContext, settings: Settings) -> Script:
+    """Press report — attributed coverage. The outlet claims it; we relay
+    that claim with attribution, never assert it as verified fact."""
+    f, segs, add = _template_parts(ctx, settings)
+    outlet = f.get("outlet")
+    head = f.get("headline")
+    if outlet and head:
+        add(f"{outlet.value_display} reports: {head.value_display}",
+            "outlet", "headline")
+    elif head:
+        add(f"Press coverage reports: {head.value_display}", "headline")
+    pub = f.get("published_at")
+    if pub and pub.value_display:
+        add(f"The report was published at {pub.value_display}.",
+            "published_at")
+    _developing_close(add)
+    name = outlet.value_display if outlet else "Press"
+    return Script(headline=f"{name} — {head.value_display}" if head else
+                  f"{name} report",
+                  segments=segs, generator="template",
+                  event_id=ctx.event_id, revision=ctx.revision)
 
 
 def _weather_template(ctx: FactContext, settings: Settings) -> Script:

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>BBC News - World</title>
+    <link>https://www.bbc.co.uk/news/</link>
+    <item>
+      <title><![CDATA[At least 12 killed in missile strike on Kharkiv apartment block, officials say]]></title>
+      <description><![CDATA[Rescue teams continue searching through the rubble after the overnight attack on the Ukrainian city.]]></description>
+      <link>https://www.bbc.co.uk/news/articles/cx2example1</link>
+      <guid isPermaLink="false">https://www.bbc.co.uk/news/articles/cx2example1#1</guid>
+      <pubDate>Fri, 07 Nov 2026 14:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title><![CDATA[Central banks hold rates steady as inflation cools]]></title>
+      <description><![CDATA[Policymakers signal a cautious approach to further easing this year.]]></description>
+      <link>https://www.bbc.co.uk/news/articles/cx2example2</link>
+      <guid isPermaLink="false">https://www.bbc.co.uk/news/articles/cx2example2#2</guid>
+      <pubDate>Fri, 07 Nov 2026 12:15:00 GMT</pubDate>
+    </item>
+    <item>
+      <title><![CDATA[]]></title>
+      <description><![CDATA[Malformed item with no title — should be skipped.]]></description>
+      <link></link>
+    </item>
+  </channel>
+</rss>

@@ -39,7 +39,8 @@ def _iso_to_display(value: Any) -> str:
 def display_value(field: str, value: Any) -> str:
     if value is None:
         return "unknown"
-    if field in ("occurred_at", "effective", "onset", "expires", "ends"):
+    if field in ("occurred_at", "effective", "onset", "expires", "ends",
+                 "published_at"):
         return _iso_to_display(value)
     if field in ("severity", "magnitude", "previous_value"):
         try:

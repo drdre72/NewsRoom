@@ -50,6 +50,8 @@ LEDGER_FIELDS = (
     # Treasury + Coinbase
     "pair", "storm_name", "storm_id", "classification",
     "advisory_num", "advisory_issuance", "pressure",
+    # press reports — attribution fields are themselves ledger facts
+    "outlet", "report_url", "published_at", "summary",
 )
 
 

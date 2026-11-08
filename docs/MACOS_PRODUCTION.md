@@ -215,6 +215,13 @@ AND `publishing.automatic: true`. All three are off by default (§66, §77).
   This is exchange-specific crypto context, not licensed consolidated
   real-time market data. `markets` joins the severity-first rundown;
   Coinbase confidence is below the BREAKING interrupt gate.
+- **Press reports** (`news_report`) — attributed coverage, not measurement:
+  BBC World, Times of India, Jerusalem Post, Al Jazeera (RSS) and
+  O'Keefe Media Group (WordPress REST; its feeds are disabled). Scripts
+  always phrase as "OUTLET reports: headline" — outlet claims are relayed
+  with attribution, never asserted as verified. Keyword scoring caps below
+  BREAKING so a headline alone can't interrupt; corroboration with
+  sensor/official sources is what escalates. Haaretz has no public feed.
 
 The poller remembers successful fetches in process (including empty or
 unchanged feeds) so source intervals remain enforced without new evidence;

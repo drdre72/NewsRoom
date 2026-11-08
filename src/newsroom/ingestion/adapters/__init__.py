@@ -14,6 +14,7 @@ from .cisa import CisaAdapter
 from .treasury import TreasuryAdapter
 from .nhc import NhcAdapter
 from .coinbase import CoinbaseAdapter
+from .news_rss import NewsRssAdapter
 
 _REGISTRY = {
     "usgs_geojson": UsgsAdapter,
@@ -31,6 +32,7 @@ _REGISTRY = {
     "treasury": TreasuryAdapter,
     "noaa_nhc": NhcAdapter,
     "coinbase": CoinbaseAdapter,
+    "news_rss": NewsRssAdapter,
 }
 
 

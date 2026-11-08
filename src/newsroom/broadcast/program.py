@@ -22,7 +22,7 @@ SEGMENT_TYPES = {
     "international": ["wildfire", "volcano", "severe_storm", "flood",
                       "landslide", "snow", "drought", "sea_ice",
                       "temp_extreme", "tropical_cyclone", "tsunami_warning",
-                      "conflict_event", "protest"],
+                      "conflict_event", "protest", "news_report"],
     "space_weather": ["space_weather"],
     "us_desk": ["disaster_declaration", "cyber_advisory"],
     "markets": ["market_quote"],
