@@ -120,10 +120,18 @@ def run_archive(conn: sqlite3.Connection, settings: Settings,
             continue
         dest = _dest_for(icloud, asset, meta)
         try:
-            if not (dest.exists() and _sha256(dest) ==
-                    (asset["sha256"] or _sha256(src))):
+            # Verify the copy against the live file, not the recorded
+            # hash — a same-path re-render can leave the row's sha stale.
+            src_sha = _sha256(src)
+            fields = {"archived_to": str(dest),
+                      "archived_at": repo.utcnow()}
+            if asset["sha256"] and asset["sha256"] != src_sha:
+                fields["sha_corrected_from"] = asset["sha256"]
+                log_event(log, 30, "recorded sha drifted from file",
+                          asset_id=asset["asset_id"])
+            if not (dest.exists() and _sha256(dest) == src_sha):
                 shutil.copy2(src, dest)
-                if _sha256(dest) != (asset["sha256"] or _sha256(src)):
+                if _sha256(dest) != src_sha:
                     raise RuntimeError("copied sha256 mismatch")
             # Pair the manifest when one exists for this render.
             manifest_row = next(
@@ -140,9 +148,9 @@ def run_archive(conn: sqlite3.Connection, settings: Settings,
                             and _sha256(mdest) == _sha256(msrc)):
                         shutil.copy2(msrc, mdest)
             with tx(conn):
-                repo.patch_asset_meta(conn, asset["asset_id"], {
-                    "archived_to": str(dest),
-                    "archived_at": repo.utcnow()})
+                if fields.get("sha_corrected_from"):
+                    repo.set_asset_sha(conn, asset["asset_id"], src_sha)
+                repo.patch_asset_meta(conn, asset["asset_id"], fields)
             total += size
             copied.append({"asset_id": asset["asset_id"],
                            "dest": str(dest), "bytes": size})

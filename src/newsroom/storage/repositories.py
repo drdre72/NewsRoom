@@ -411,6 +411,13 @@ def patch_asset_meta(conn: sqlite3.Connection, asset_id: str,
     )
 
 
+def set_asset_sha(conn: sqlite3.Connection, asset_id: str,
+                  sha256: str) -> None:
+    """Correct a drifted recorded hash — the file on disk is the truth."""
+    conn.execute("UPDATE assets SET sha256=? WHERE asset_id=?",
+                 (sha256, asset_id))
+
+
 def story_for_render(conn: sqlite3.Connection, event_id: str,
                      revision: int) -> sqlite3.Row | None:
     """The validated story a render used — the script a recipe replays."""

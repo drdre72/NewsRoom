@@ -336,8 +336,10 @@ class TestRestore:
 
 
 class TestArchive:
-    def test_disabled_by_default(self, conn, settings, workdir):
+    def test_disabled_reports_and_copies_nothing(self, conn, settings,
+                                                 workdir):
         from newsroom.storage.archive import archive_report, run_archive
+        settings.raw()["archive"]["enabled"] = False
         report = archive_report(conn, settings)
         assert report["enabled"] is False
         out = run_archive(conn, settings)

@@ -29,10 +29,13 @@ storage:
   max_dehydrate_per_sweep: 10
 
 archive:
-  enabled: false                 # iCloud Drive archive of completed masters
+  enabled: true                  # iCloud Drive archive of completed masters
   icloud_dir: "~/Library/Mobile Documents/com~apple~CloudDocs/newsroom"
   max_gb_per_run: 5              # bounded copies; macOS syncs async, so an
                                  # archive pass never competes with renders
+  interval_hours: 1              # service sweeps: masters reach iCloud
+                                 # within the hour; TripMode may hold sync
+                                 # while gaming — copies queue locally
 
 workers:
   llm: 1

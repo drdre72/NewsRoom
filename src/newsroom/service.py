@@ -28,6 +28,7 @@ class ServiceLoop:
         self._stop = False
         self._last_sweep = 0.0
         self._sweep_pending: list[str] | None = None
+        self._last_archive = 0.0
 
     def install_signal_handlers(self) -> None:
         def _handler(signum, _frame):
@@ -64,9 +65,13 @@ class ServiceLoop:
         log_event(log, 20, "core service stopped")
 
     def _sweep_step(self) -> None:
-        """Auto-dehydrate, gated on storage.auto_dehydrate (off by
-        default): at most max_dehydrate_per_sweep assets per interval,
-        one per idle cycle, each verified before its MP4 is removed."""
+        """Idle-cycle maintenance. Two independent gates:
+        - archive.enabled: copy completed masters to iCloud, bounded per
+          pass (file copies, not renders — cheap by comparison)
+        - storage.auto_dehydrate (off by default): at most
+          max_dehydrate_per_sweep assets per interval, one per idle
+          cycle, each verified before its MP4 is removed."""
+        self._archive_step()
         if not self.settings.get("storage.auto_dehydrate", False):
             return
         interval_h = float(
@@ -99,6 +104,28 @@ class ServiceLoop:
             self._last_sweep = time.time()
             self._sweep_pending = None
             log_event(log, 20, "retention sweep complete")
+
+    def _archive_step(self) -> None:
+        """Copy new masters to iCloud Drive on the configured cadence —
+        sha256-verified and bounded, so an archive pass never competes
+        with renders. Failures retry next pass; never kill the loop."""
+        if not self.settings.get("archive.enabled", False):
+            return
+        interval_h = float(self.settings.get("archive.interval_hours", 1))
+        if time.time() - self._last_archive < interval_h * 3600:
+            return
+        try:
+            from .storage.archive import run_archive
+            result = run_archive(self.conn, self.settings)
+            self._last_archive = time.time()
+            if result.get("copied"):
+                log_event(log, 20, "icloud archive pass",
+                          copied=len(result["copied"]),
+                          bytes=result["copied_bytes"],
+                          failed=len(result.get("failed", [])))
+        except Exception as exc:  # noqa: BLE001 — archive never kills core
+            log_event(log, 40, "icloud archive pass failed",
+                      error=str(exc))
 
     def _sleep(self, seconds: int) -> None:
         """Interruptible sleep — wake each second to check the stop flag."""
