@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import io
 import json
+import urllib.parse
 import urllib.request
 import zipfile
 from typing import Iterable
@@ -22,8 +23,9 @@ from ...models.observation import NormalizedObservation
 from ...security import fetch_bytes, read_limited
 from .nws import _iso
 
-_LASTUPDATE = "https://api.gdeltproject.org/gdeltv2/lastupdate.txt"
-_GDELT_HOSTS = {"api.gdeltproject.org", "data.gdeltproject.org"}
+# GDELT v2 data files live on data.gdeltproject.org; api.* 404s.
+_LASTUPDATE = "https://data.gdeltproject.org/gdeltv2/lastupdate.txt"
+_GDELT_HOSTS = {"data.gdeltproject.org", "api.gdeltproject.org"}
 
 # GDELT 2.0 Events TSV column positions (0-indexed, per the codebook).
 _C = dict(gid=0, day=1, actor1_name=6, actor1_country=7, actor2_name=16,
@@ -51,6 +53,12 @@ class GdeltAdapter(SourceAdapter):
              if ".export.CSV.zip" in ln), None)
         if not export_url:
             raise RuntimeError("no .export.CSV.zip in lastupdate.txt")
+        # lastupdate.txt advertises http:// URLs — upgrade to https on the
+        # approved host rather than weakening the fetch boundary.
+        parts = urllib.parse.urlsplit(export_url)
+        if parts.scheme == "http" and parts.hostname in _GDELT_HOSTS:
+            export_url = urllib.parse.urlunsplit(
+                ("https", parts.netloc, parts.path, "", ""))
         req = urllib.request.Request(export_url,
                                      headers={"User-Agent": user_agent})
         blob = fetch_bytes(req, timeout=timeout, allowed_hosts=_GDELT_HOSTS)
@@ -62,8 +70,8 @@ class GdeltAdapter(SourceAdapter):
                            payloads=[tsv])
 
     def split_items(self, body: str) -> Iterable[str]:
-        quads = set(str(q) for q in
-                    self.config.get("quad_classes", ["3", "4"]))
+        quads = {int(q) for q in
+                 self.config.get("quad_classes", ["3", "4"])}
         min_src = int(self.config.get("min_num_sources", 2))
         limit = int(self.config.get("max_items", 300))
         emitted = 0
@@ -71,7 +79,12 @@ class GdeltAdapter(SourceAdapter):
             if emitted >= limit:
                 break
             cols = line.split("\t")
-            if len(cols) < 60 or cols[_C["quad"]] not in quads:
+            if len(cols) < 60:
+                continue
+            try:
+                if int(cols[_C["quad"]] or 0) not in quads:
+                    continue            # live export zero-pads ("04")
+            except ValueError:
                 continue
             try:
                 if int(cols[_C["sources"]] or 0) < min_src:
