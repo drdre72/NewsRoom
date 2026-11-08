@@ -17,7 +17,8 @@ def test_run_polls_between_queued_renders(conn, settings, monkeypatch):
     polls, rendered, completed = [], [], []
     monkeypatch.setattr(polling, "poll_once",
                         lambda *args: polls.append("poll") or {"errors": []})
-    monkeypatch.setattr(source_health, "record_poll", lambda *args: None)
+    monkeypatch.setattr(source_health, "record_poll",
+                        lambda *args, **kwargs: None)
     monkeypatch.setattr(repo, "claim_next_job",
                         lambda conn: queue.pop(0) if queue else None)
     monkeypatch.setattr(repo, "complete_job",
