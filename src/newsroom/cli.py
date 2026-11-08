@@ -166,6 +166,63 @@ def cmd_preview(args) -> int:
     return 0
 
 
+def cmd_retention(args) -> int:
+    """Eligibility ledger: which videos could convert to recipes, which
+    are protected, and why — report-only, never deletes."""
+    from .storage.recipes import retention_report
+    conn, settings = _conn_and_settings(args)
+    report = retention_report(conn, settings)
+    if args.json:
+        print(json.dumps(report, indent=2))
+    else:
+        print(f"retention: {report['effective_retention_days']}d window "
+              f"(disk free {report['disk']['free_gb']} GiB)")
+        for status, n in sorted(report["counts"].items()):
+            print(f"  {status:<14} {n}")
+        print(f"eligible: {len(report['eligible'])} assets, "
+              f"{report['eligible_bytes'] / 1e6:.0f} MB")
+        for e in report["eligible"][:20]:
+            print(f"  {e['asset_id']:<18} {e['event_id'][:34]:<34} "
+                  f"{e['reason']}")
+        print(f"recipes: {report['recipes']}")
+        if not args.execute:
+            print("plan only — run `dehydrate --execute` to apply")
+    return 0
+
+
+def cmd_dehydrate(args) -> int:
+    """Convert eligible videos to verified rehydration recipes.
+    Without --execute this prints the plan and changes nothing."""
+    from .storage.recipes import dehydrate
+    conn, settings = _conn_and_settings(args)
+    result = dehydrate(conn, settings, execute=args.execute,
+                       verify=not args.no_verify, budget=args.budget,
+                       asset_ids=args.asset)
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+def cmd_restore(args) -> int:
+    """Rebuild a retired video from its recipe — the only step needed."""
+    from .storage.recipes import restore
+    conn, settings = _conn_and_settings(args)
+    manifest = restore(conn, settings, args.ident)
+    print(json.dumps(manifest, indent=2))
+    return 0 if manifest["publication_gate"]["verdict"] == "pass" else 1
+
+
+def cmd_archive(args) -> int:
+    """Copy completed masters to iCloud Drive, sha256-verified, budgeted."""
+    from .storage.archive import archive_report, run_archive
+    conn, settings = _conn_and_settings(args)
+    if args.execute:
+        result = run_archive(conn, settings, max_gb=args.max_gb)
+    else:
+        result = archive_report(conn, settings)
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok", True) else 1
+
+
 def cmd_services(args) -> int:
     from .macos.services import install, status, uninstall
     return {"install": lambda: install(print_only=args.print_only),
@@ -209,6 +266,25 @@ def main(argv: list[str] | None = None) -> int:
     p_sv = sub.add_parser("services")
     p_sv.add_argument("action", choices=("install", "uninstall", "status"))
     p_sv.add_argument("--print", dest="print_only", action="store_true")
+    p_ret = sub.add_parser("retention")
+    p_ret.add_argument("--execute", action="store_true",
+                       help="accepted for symmetry; retention never deletes")
+    p_dh = sub.add_parser("dehydrate")
+    p_dh.add_argument("--execute", action="store_true",
+                      help="apply the plan (default: report only)")
+    p_dh.add_argument("--no-verify", action="store_true",
+                      help="skip the restore-verification render (recipes "
+                           "stay 'written'; MP4s are NOT removed)")
+    p_dh.add_argument("--budget", type=int, default=None,
+                      help="max assets this run")
+    p_dh.add_argument("--asset", action="append", default=None,
+                      help="restrict to asset_id(s); repeatable")
+    p_res = sub.add_parser("restore")
+    p_res.add_argument("ident", help="recipe_id, asset_id, or event_id")
+    p_ar = sub.add_parser("archive")
+    p_ar.add_argument("--execute", action="store_true",
+                      help="perform copies (default: report only)")
+    p_ar.add_argument("--max-gb", type=float, default=None)
 
     args = parser.parse_args(argv)
     configure_logging()
@@ -218,7 +294,9 @@ def main(argv: list[str] | None = None) -> int:
         "render-long": cmd_render_longform, "events": cmd_events,
         "story": cmd_story, "broadcast": cmd_broadcast,
         "preview": cmd_preview, "health": cmd_health,
-        "services": cmd_services,
+        "services": cmd_services, "retention": cmd_retention,
+        "dehydrate": cmd_dehydrate, "restore": cmd_restore,
+        "archive": cmd_archive,
     }[args.command](args)
 
 

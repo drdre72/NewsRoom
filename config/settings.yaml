@@ -20,6 +20,19 @@ storage:
   min_free_gb: 10     # stop heavy renders before the Mac runs out of space
   frame_retention_hours: 12
   intermediate_retention_days: 3
+  media_retention_days: 7        # videos become recipe-eligible after this
+  pressure_retention_days: 2     # sooner when free < 2x min_free_gb
+  recipes_dir: output/recipes
+  auto_dehydrate: false          # §52 — operator flips after reviewing a
+                                 # retention report; never default-on
+  sweep_interval_hours: 24
+  max_dehydrate_per_sweep: 10
+
+archive:
+  enabled: false                 # iCloud Drive archive of completed masters
+  icloud_dir: "~/Library/Mobile Documents/com~apple~CloudDocs/newsroom"
+  max_gb_per_run: 5              # bounded copies; macOS syncs async, so an
+                                 # archive pass never competes with renders
 
 workers:
   llm: 1

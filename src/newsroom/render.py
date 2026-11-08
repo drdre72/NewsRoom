@@ -211,6 +211,7 @@ def render_short(
     slug = event.location_label or event.event_id
     slug = "".join(c if c.isalnum() else "_" for c in slug)[:40].strip("_")
     out = output_dir() / "shorts" / f"{slug}_r{rev}_short.mp4"
+    out.parent.mkdir(parents=True, exist_ok=True)
     compose_short(timeline, out, settings, ass_path=ass)
 
     # --- manifest + gate ---------------------------------------------------
@@ -227,9 +228,14 @@ def render_short(
                   "hash": _sha256(narration) if narration else None},
         "visual_plan_hash": hashlib.sha256(
             json.dumps(vplan.to_dict(), sort_keys=True).encode()).hexdigest(),
+        "visual_plan": vplan.to_dict(),
+        "captions": [[a, b, t] for a, b, t in caption_items],
+        "render": {"title_s": _TITLE_S, "tail_s": _TAIL_S, "gap_s": _GAP_S,
+                   "mid_min_s": 2.0, "target_floor_s": 4.0},
         "video": {"path": str(out), "hash": _sha256(out), "width": w,
                   "height": h, "fps": fps},
         "tts_model": engine.name if engine else None,
+        "voice": voice if engine else None,
         "renderer": (f"{card_renderer.name}+{map_renderer.name}"
                      if map_renderer else card_renderer.name),
         "platform": "macos-arm64",
@@ -439,9 +445,14 @@ def render_longform(
                   "hash": _sha256(narration) if narration else None},
         "visual_plan_hash": hashlib.sha256(
             json.dumps(vplan.to_dict(), sort_keys=True).encode()).hexdigest(),
+        "visual_plan": vplan.to_dict(),
+        "captions": [[a, b, t] for a, b, t in caption_items],
+        "render": {"title_s": _TITLE_S, "tail_s": _TAIL_S, "gap_s": _GAP_S,
+                   "mid_min_s": 3.0, "target_floor_s": 8.0},
         "video": {"path": str(out), "hash": _sha256(out), "width": w,
                   "height": h, "fps": fps},
         "tts_model": engine.name,
+        "voice": voice,
         "renderer": (f"{card_renderer.name}+{map_renderer.name}"
                      if map_renderer else card_renderer.name),
         "platform": "macos-arm64",
@@ -462,4 +473,191 @@ def render_longform(
               revision=rev, video=str(out), gate=gate["verdict"],
               chapters=len(chapters),
               renderer=manifest["renderer"], tts=engine.name)
+    return manifest
+
+
+def render_from_recipe(
+    conn: sqlite3.Connection,
+    settings: Settings,
+    recipe: dict,
+    out_path: Path | None = None,
+    persist: bool = True,
+) -> dict:
+    """Rebuild a retired video from its rehydration recipe — no new
+    editorial work: the validated script replays verbatim, the frozen
+    visual plan re-fits to fresh narration, the same gate runs again.
+
+    persist=False renders to the recipe's scratch dir for verification
+    only (no asset rows, no broadcast-visible output).
+    """
+    from .models.event import CanonicalEvent
+    from .models.shot import VisualPlan
+    from .models.story import Script
+    from .quality.visual import check_video
+
+    event = CanonicalEvent(**recipe["event"])
+    rev = int(recipe["revision"])
+    fmt = recipe.get("format", "short")
+    script = Script.from_dict(recipe["script"])
+    script.validated = True          # stored script passed validation once
+    vplan = VisualPlan.from_dict(recipe["visual_plan"])
+    rcfg = recipe.get("render", {})
+    title_s = float(rcfg.get("title_s", _TITLE_S))
+    tail_s = float(rcfg.get("tail_s", _TAIL_S))
+    gap_s = float(rcfg.get("gap_s", _GAP_S))
+    mid_min = float(rcfg.get("mid_min_s", 3.0 if fmt == "longform" else 2.0))
+    floor = float(rcfg.get("target_floor_s", 8.0 if fmt == "longform" else 4.0))
+    w = int(rcfg.get("width", vplan.width))
+    h = int(rcfg.get("height", vplan.height))
+    fps = int(rcfg.get("fps", vplan.fps))
+
+    rid = recipe.get("recipe_id", "recipe")
+    work = cache_dir() / "renders" / f"restore_{rid}"
+    shots_dir = work / "shots"
+    audio_dir = work / "audio"
+    shots_dir.mkdir(parents=True, exist_ok=True)
+    audio_dir.mkdir(parents=True, exist_ok=True)
+
+    # --- narration: replay each stored segment through the pinned voice --
+    engine = select_engine(settings)
+    if not engine:
+        raise RuntimeError("restore requires a TTS engine; none available")
+    # The engine's configured voice wins — the recipe's recorded voice is
+    # provenance only. strict_voice forbids anything but the approved
+    # on-air voice, even when the retired original predates the lock.
+    voice = (settings.get("tts.kokoro_voice")
+             if engine.name == "kokoro_mlx"
+             else settings.get("tts.say_voice"))
+    if recipe.get("voice") and recipe["voice"] != voice:
+        log_event(log, 20, "recipe voice substituted",
+                  recorded=recipe["voice"], using=voice)
+    caption_items: list[tuple[float, float, str]] = []
+    seg_wavs: list[Path] = []
+    t = title_s
+    for i, seg in enumerate(script.segments):
+        wav = audio_dir / f"seg_{i:02d}.wav"
+        res = engine.synthesize(seg.text, seg.speech_text, voice, wav)
+        seg.duration_s = res.duration_s
+        seg_wavs.append(res.path)
+        caption_items.append((t, t + res.duration_s, seg.text))
+        t += res.duration_s + gap_s
+    narration = _concat_audio(seg_wavs, audio_dir / "narration.wav",
+                              gap_s=gap_s)
+    narration_dur = t - title_s - gap_s if seg_wavs else 0
+
+    # --- visuals: frozen plan, durations re-fit to the fresh narration --
+    middle = [s for s in vplan.shots
+              if s.type not in ("title_card", "source_card")]
+    title = next((s for s in vplan.shots if s.type == "title_card"), None)
+    tail = next((s for s in vplan.shots if s.type == "source_card"), None)
+    if title:
+        title.duration_s = title_s
+    if tail:
+        tail.duration_s = tail_s
+    target_mid = max(floor, narration_dur)
+    cur_mid = sum(s.duration_s for s in middle) or 1.0
+    for s in middle:
+        s.duration_s = round(max(mid_min, s.duration_s * target_mid
+                                 / cur_mid), 2)
+
+    card_renderer = CardRenderer()
+    map_renderer = _select_map_renderer(settings)
+    context = recipe.get("context") or {
+        "level": event.impact_level,
+        "event_label": event.event_type.replace("_", " "),
+        "source_line": f"SOURCE: {event.source_ids[0] if event.source_ids else 'unknown'}",
+        "updated": f"UPDATED {event.last_updated[11:19]} UTC",
+    }
+    shot_paths = render_plan(card_renderer, vplan, shots_dir, context,
+                             map_renderer=map_renderer)
+
+    # --- captions + compose --------------------------------------------
+    ass = write_ass(caption_items, work / "captions.ass", w, h)
+    write_srt(caption_items, work / "captions.srt")
+    timeline = Timeline(width=w, height=h, fps=fps,
+                        audio=narration, audio_delay_s=title_s,
+                        caption_items=caption_items)
+    for shot, path in zip(vplan.shots, shot_paths):
+        timeline.visuals.append(VisualSegment(
+            source=path, duration_s=shot.duration_s,
+            is_sequence=path.is_dir()))
+
+    out = out_path or Path(recipe["video"]["path"])
+    if out.exists() and out_path is None:
+        # Never clobber a file that isn't the retired original.
+        out = out.with_name(f"{out.stem}_restored{out.suffix}")
+        if out.exists():
+            raise RuntimeError(f"restore target already exists: {out}")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    compose_short(timeline, out, settings, ass_path=ass)
+
+    # --- chapters (longform): stored first-segment indices re-resolve ---
+    chapters = script.extra.get("chapters") or []
+    for ch in chapters:
+        fi = ch.get("first_segment", 0)
+        if fi < len(caption_items):
+            ch["start_s"] = round(caption_items[fi][0], 2)
+        elif caption_items:
+            ch["start_s"] = round(caption_items[-1][1], 2)
+        else:
+            ch["start_s"] = title_s
+
+    manifest = {
+        "event_id": event.event_id, "event_revision": rev,
+        "rendered_at": repo.utcnow(),
+        "story_id": recipe.get("story_id"),
+        "sources": recipe.get("sources", event.source_ids),
+        "fact_ids": recipe.get("fact_ids", []),
+        "format": fmt,
+        "restored_from": rid,
+        "script": {"generator": f"{script.generator}:recipe",
+                   "validated": True,
+                   "hash": _sha256(work / "captions.srt")},
+        "audio": {"engine": engine.name, "degraded": False,
+                  "hash": _sha256(narration)},
+        "visual_plan_hash": hashlib.sha256(
+            json.dumps(vplan.to_dict(), sort_keys=True).encode()).hexdigest(),
+        "video": {"path": str(out), "hash": _sha256(out), "width": w,
+                  "height": h, "fps": fps},
+        "tts_model": engine.name,
+        "voice": voice,
+        "renderer": (f"{card_renderer.name}+{map_renderer.name}"
+                     if map_renderer else card_renderer.name),
+        "platform": "macos-arm64",
+        "dry_run": False,
+    }
+    if chapters:
+        manifest["chapters"] = [
+            {"title": c["title"], "start_s": c.get("start_s", 0.0)}
+            for c in chapters]
+        manifest["youtube_chapters"] = "\n".join(
+            f"{int(c.get('start_s', 0))//60:02d}:"
+            f"{int(c.get('start_s', 0))%60:02d} {c['title']}"
+            for c in chapters)
+
+    if not persist:
+        # Verification render: QC the file, keep everything in scratch.
+        manifest["verify"] = check_video(manifest)
+        (work / "manifest.json").write_text(json.dumps(manifest, indent=2))
+        return manifest
+
+    safe_id = re.sub(r"[^A-Za-z0-9_.-]", "_", event.event_id)
+    suffix = "_longform" if fmt == "longform" else ""
+    mpath = (output_dir() / "manifests"
+             / f"{safe_id}_r{rev}{suffix}_restored.json")
+    mpath.write_text(json.dumps(manifest, indent=2))
+    meta = {"format": fmt, "restored_from": rid,
+            "restored_at": repo.utcnow()}
+    for kind, p in (("video", out), ("manifest", mpath), ("caption", ass),
+                    ("audio", narration)):
+        if p:
+            repo.insert_asset(conn, repo.new_id("asset"), kind, str(p),
+                              _sha256(p), event.event_id, rev,
+                              meta if kind == "video" else {})
+    gate = gate_render(conn, settings, manifest)
+    manifest["publication_gate"] = gate
+    mpath.write_text(json.dumps(manifest, indent=2))
+    log_event(log, 20, "recipe restore complete", recipe_id=rid,
+              event_id=event.event_id, revision=rev, video=str(out),
+              gate=gate["verdict"])
     return manifest

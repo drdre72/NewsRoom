@@ -380,11 +380,90 @@ def assets_for_event(conn: sqlite3.Connection, event_id: str) -> list[sqlite3.Ro
 def latest_video_asset(conn: sqlite3.Connection, event_id: str,
                        revision: int) -> sqlite3.Row | None:
     # Long-form uses the same "video" kind but is not a broadcast Short.
+    # Archived (dehydrated) assets are excluded: their files are gone and
+    # they must leave air rotation until a restore re-renders them.
     return conn.execute(
         "SELECT * FROM assets WHERE event_id=? AND revision=? AND kind='video'"
         " AND COALESCE(json_extract(meta_json, '$.format'), 'short')='short'"
+        " AND COALESCE(json_extract(meta_json, '$.archived'), 0)=0"
         " ORDER BY created_at DESC LIMIT 1", (event_id, revision),
     ).fetchone()
+
+
+def get_asset(conn: sqlite3.Connection, asset_id: str) -> sqlite3.Row | None:
+    return conn.execute(
+        "SELECT * FROM assets WHERE asset_id=?", (asset_id,)).fetchone()
+
+
+def video_assets(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Every video asset, archived or not — the retention scan surface."""
+    return conn.execute(
+        "SELECT * FROM assets WHERE kind='video' ORDER BY created_at"
+    ).fetchall()
+
+
+def patch_asset_meta(conn: sqlite3.Connection, asset_id: str,
+                     fields: dict) -> None:
+    """Merge keys into an asset's meta_json (archive/restore bookkeeping)."""
+    conn.execute(
+        "UPDATE assets SET meta_json=json_patch(meta_json, ?)"
+        " WHERE asset_id=?", (json.dumps(fields), asset_id),
+    )
+
+
+def story_for_render(conn: sqlite3.Connection, event_id: str,
+                     revision: int) -> sqlite3.Row | None:
+    """The validated story a render used — the script a recipe replays."""
+    rows = stories_for_render(conn, event_id, revision)
+    return rows[0] if rows else None
+
+
+def stories_for_render(conn: sqlite3.Connection, event_id: str,
+                       revision: int) -> list[sqlite3.Row]:
+    """All validated stories for a render — short and longform renders can
+    share a revision, so callers pick by plan story_type."""
+    return conn.execute(
+        "SELECT * FROM stories WHERE event_id=? AND revision=?"
+        " AND validated=1 ORDER BY created_at DESC",
+        (event_id, revision),
+    ).fetchall()
+
+
+def air_stats(conn: sqlite3.Connection, event_id: str,
+              revision: int) -> dict:
+    row = conn.execute(
+        "SELECT COUNT(*) AS n, MIN(started_at) AS first_at,"
+        " MAX(started_at) AS last_at FROM air_log"
+        " WHERE event_id=? AND revision=?", (event_id, revision),
+    ).fetchone()
+    return {"count": row["n"], "first_at": row["first_at"],
+            "last_at": row["last_at"]}
+
+
+def latest_air(conn: sqlite3.Connection) -> sqlite3.Row | None:
+    """Most recent air_log row — callers judge recency for on-air checks."""
+    return conn.execute(
+        "SELECT asset_path, started_at FROM air_log"
+        " ORDER BY started_at DESC LIMIT 1"
+    ).fetchone()
+
+
+def pending_job_for(conn: sqlite3.Connection, event_id: str,
+                    revision: int) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM jobs WHERE event_id=? AND revision=?"
+        " AND status IN ('queued','running') LIMIT 1",
+        (event_id, revision),
+    ).fetchone() is not None
+
+
+def pending_publication_for(conn: sqlite3.Connection,
+                            event_id: str) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM publications WHERE event_id=?"
+        " AND status IN ('pending','queued','uploading') LIMIT 1",
+        (event_id,),
+    ).fetchone() is not None
 
 
 # ------------------------------------------------------------------ air log
@@ -416,3 +495,68 @@ def air_log_tail(conn: sqlite3.Connection, limit: int = 20) -> list[sqlite3.Row]
     return conn.execute(
         "SELECT * FROM air_log ORDER BY started_at DESC LIMIT ?", (limit,)
     ).fetchall()
+
+
+# --------------------------------------------------------------------- recipes
+# Rehydration recipes: everything needed to rebuild a retired video as
+# "pure instruction" — the approved media-retention policy (§44, §52).
+
+def insert_recipe(conn: sqlite3.Connection, recipe: dict) -> None:
+    conn.execute(
+        "INSERT INTO recipes (recipe_id, asset_id, event_id, revision, format,"
+        " path, video_path, video_sha256, video_bytes, recipe_sha256, status,"
+        " last_air_at, created_at)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (recipe["recipe_id"], recipe["asset_id"], recipe["event_id"],
+         recipe["revision"], recipe["format"], recipe["path"],
+         recipe["video_path"], recipe["video_sha256"],
+         recipe["video_bytes"], recipe["recipe_sha256"], recipe["status"],
+         recipe.get("last_air_at"), recipe["created_at"]),
+    )
+
+
+def get_recipe(conn: sqlite3.Connection,
+               recipe_id: str) -> sqlite3.Row | None:
+    return conn.execute(
+        "SELECT * FROM recipes WHERE recipe_id=?", (recipe_id,)).fetchone()
+
+
+def recipe_for_asset(conn: sqlite3.Connection,
+                     asset_id: str) -> sqlite3.Row | None:
+    return conn.execute(
+        "SELECT * FROM recipes WHERE asset_id=?"
+        " ORDER BY created_at DESC LIMIT 1", (asset_id,)).fetchone()
+
+
+def recipes_for_event(conn: sqlite3.Connection, event_id: str,
+                      revision: int | None = None) -> list[sqlite3.Row]:
+    if revision is None:
+        return conn.execute(
+            "SELECT * FROM recipes WHERE event_id=? ORDER BY created_at",
+            (event_id,)).fetchall()
+    return conn.execute(
+        "SELECT * FROM recipes WHERE event_id=? AND revision=?"
+        " ORDER BY created_at", (event_id, revision)).fetchall()
+
+
+def list_recipes(conn: sqlite3.Connection,
+                 status: str | None = None) -> list[sqlite3.Row]:
+    if status:
+        return conn.execute(
+            "SELECT * FROM recipes WHERE status=? ORDER BY created_at",
+            (status,)).fetchall()
+    return conn.execute(
+        "SELECT * FROM recipes ORDER BY created_at").fetchall()
+
+
+def set_recipe_status(conn: sqlite3.Connection, recipe_id: str,
+                      status: str, **fields) -> None:
+    """Status transition + timestamp columns (verified_at, dehydrated_at,
+    restored_at, verify_report_json passed through as extra fields)."""
+    allowed = {"verified_at", "dehydrated_at", "restored_at",
+               "verify_report_json"}
+    sets = ["status=?"] + [f"{k}=?" for k in fields if k in allowed]
+    params = [status] + [fields[k] for k in fields if k in allowed]
+    params.append(recipe_id)
+    conn.execute(f"UPDATE recipes SET {', '.join(sets)}"
+                 f" WHERE recipe_id=?", params)

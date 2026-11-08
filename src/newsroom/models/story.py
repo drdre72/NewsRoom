@@ -39,3 +39,20 @@ class Script:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "Script":
+        """Rebuild a stored script — recipes replay these verbatim (§52)."""
+        return cls(
+            headline=d["headline"],
+            segments=[ScriptSegment(
+                text=s["text"], speech_text=s.get("speech_text", s["text"]),
+                fact_ids=list(s.get("fact_ids", [])),
+                duration_s=float(s.get("duration_s", 0.0)),
+            ) for s in d["segments"]],
+            generator=d.get("generator", "recipe"),
+            event_id=d["event_id"], revision=int(d["revision"]),
+            validated=bool(d.get("validated", False)),
+            validation_errors=list(d.get("validation_errors", [])),
+            extra=dict(d.get("extra", {})),
+        )

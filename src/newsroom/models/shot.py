@@ -31,3 +31,15 @@ class VisualPlan:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "VisualPlan":
+        return cls(
+            event_id=d["event_id"], revision=int(d["revision"]),
+            width=int(d["width"]), height=int(d["height"]),
+            fps=int(d["fps"]),
+            shots=[Shot(type=s["type"], duration_s=float(s["duration_s"]),
+                        params=dict(s.get("params", {})))
+                   for s in d.get("shots", [])],
+            style=dict(d.get("style", {})),
+        )

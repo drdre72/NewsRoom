@@ -17,6 +17,10 @@ python main.py events        # list canonical events
 python main.py story <id>    # revision + fact-ledger history for an event
 python main.py broadcast     # Broadcast Director: rundown → HLS live.m3u8
 python main.py preview       # serve the stream + status on localhost:8788
+python main.py retention     # media eligibility ledger (report-only)
+python main.py dehydrate [--execute]   # eligible videos → verified recipes
+python main.py restore <id>  # rebuild a retired video from its recipe
+python main.py archive [--execute]     # copy masters to iCloud (verified)
 python main.py services install|status|uninstall   # launchd agents
 .venv/bin/python -m pytest tests/    # offline unit tests (no internet needed)
 ```

@@ -127,6 +127,53 @@ playlist.
   includes a **read-only** expiry audit for temporary frames/audio/shots.
   The retention values in `config/settings.yaml` do not delete files:
   approve a specific cleanup policy before enabling any deletion.
+
+### Media retention — rehydration recipes
+
+Finished media retires to **pure instruction** form instead of sitting on
+disk forever. The lifecycle is operator-driven; nothing deletes without
+an explicit `--execute`, and `storage.auto_dehydrate` stays off until
+approved:
+
+- `python main.py retention` — the eligibility ledger. A video is
+  **protected** while it aired within `storage.media_retention_days` (7),
+  is on air, has a queued/running render, awaits a publication row, or
+  can still premiere (current revision, sufficient confidence). It is
+  **eligible** once retired past the window, superseded by a newer
+  revision before airing, or unairable. Disk pressure (free < 2×
+  `min_free_gb`) shrinks the window to `pressure_retention_days` (2).
+- `python main.py dehydrate` — prints the plan; `--execute` writes a
+  recipe per eligible asset, **re-renders it to scratch to prove the
+  recipe works**, and only then archives the asset row and removes the
+  MP4. A failed verification keeps everything (`verify_failed` status).
+  Unverified recipes never release their MP4.
+- `python main.py restore <recipe|asset|event id>` — the only step:
+  replays the stored validated script through the pinned voice, re-fits
+  the frozen visual plan to fresh narration, recomposes, gates, and
+  re-enters the video into air rotation as a new asset row. The retired
+  asset stays archived history.
+- Recipes live in `output/recipes/*.recipe.json` and the `recipes` table
+  (migration 0003) with sha256 tamper checks; recipe files contain the
+  validated script, fact snapshot, visual plan, captions, render
+  settings, voice/model pins, source/provenance, and hashes.
+- Archived assets are excluded from `latest_video_asset`, so a
+  dehydrated story leaves the rundown/replay rotation automatically.
+  The DB, evidence, facts, stories, and manifests are never touched.
+
+Restores are editorially equivalent, not bit-identical (encoder/TTS
+version drift) — exact masters belong to the archive below.
+
+### iCloud archive (opt-in)
+
+`archive.enabled: true` + `archive.icloud_dir` (defaults to
+`~/Library/Mobile Documents/com~apple~CloudDocs/newsroom`) lets
+`python main.py archive --execute` copy completed MP4 masters + manifests
+into the iCloud Drive tree, sha256-verified per file, bounded by
+`archive.max_gb_per_run` (5). Asset rows record `archived_to` only after
+verification; re-runs are no-ops and interrupted runs retry. iCloud is
+an archive target only — never the live disk, never the sole copy — and
+macOS syncs asynchronously (TripMode may hold it while gaming), so local
+masters are never removed by the archive step.
 - Routine INFO records go to the rotating JSON log; launchd stderr
   receives WARNING and ERROR only. Historical stderr files are not
   truncated by this policy. The broadcast owns and trims its live HLS

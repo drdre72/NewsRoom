@@ -26,6 +26,8 @@ class ServiceLoop:
         self.conn = conn
         self.settings = settings
         self._stop = False
+        self._last_sweep = 0.0
+        self._sweep_pending: list[str] | None = None
 
     def install_signal_handlers(self) -> None:
         def _handler(signum, _frame):
@@ -53,9 +55,50 @@ class ServiceLoop:
             # A backlog must not delay the next source poll until every
             # render finishes. One render at a time still preserves the
             # Apple Silicon memory budget.
-            self.drain_jobs(max_jobs=1)
+            processed = self.drain_jobs(max_jobs=1)
+            if not processed:
+                # Idle cycle: an approved retention sweep may convert one
+                # eligible video — render jobs always win the cycle.
+                self._sweep_step()
             self._sleep(max(0, int(interval - (time.monotonic() - cycle_started))))
         log_event(log, 20, "core service stopped")
+
+    def _sweep_step(self) -> None:
+        """Auto-dehydrate, gated on storage.auto_dehydrate (off by
+        default): at most max_dehydrate_per_sweep assets per interval,
+        one per idle cycle, each verified before its MP4 is removed."""
+        if not self.settings.get("storage.auto_dehydrate", False):
+            return
+        interval_h = float(
+            self.settings.get("storage.sweep_interval_hours", 24))
+        if self._sweep_pending is None:
+            if time.time() - self._last_sweep < interval_h * 3600:
+                return
+            from .storage.recipes import retention_report
+            budget = int(self.settings.get(
+                "storage.max_dehydrate_per_sweep", 10))
+            self._sweep_pending = [
+                e["asset_id"]
+                for e in retention_report(self.conn, self.settings)
+                .get("eligible", [])][:budget]
+            if not self._sweep_pending:
+                self._last_sweep = time.time()
+                self._sweep_pending = None
+                return
+            log_event(log, 20, "retention sweep started",
+                      queued=len(self._sweep_pending))
+        asset_id = self._sweep_pending.pop(0)
+        try:
+            from .storage.recipes import dehydrate
+            dehydrate(self.conn, self.settings, execute=True,
+                      verify=True, asset_ids=[asset_id])
+        except Exception as exc:  # noqa: BLE001 — sweep never kills core
+            log_event(log, 40, "retention sweep asset failed",
+                      asset_id=asset_id, error=str(exc))
+        if not self._sweep_pending:
+            self._last_sweep = time.time()
+            self._sweep_pending = None
+            log_event(log, 20, "retention sweep complete")
 
     def _sleep(self, seconds: int) -> None:
         """Interruptible sleep — wake each second to check the stop flag."""
@@ -64,20 +107,21 @@ class ServiceLoop:
                 return
             time.sleep(1)
 
-    def drain_jobs(self, max_jobs: int | None = None) -> None:
-        """Run queued jobs serially; optionally yield to the next poll."""
+    def drain_jobs(self, max_jobs: int | None = None) -> int:
+        """Run queued jobs serially; optionally yield to the next poll.
+        Returns the number of jobs processed this call."""
         from .storage import repositories as repo
         from .storage.retention import disk_health
         if not disk_health(self.settings)["ok"]:
             log_event(log, 40, "render paused: low disk space")
-            return
+            return 0
         processed = 0
         while not self._stop:
             if max_jobs is not None and processed >= max_jobs:
-                return
+                return processed
             job = repo.claim_next_job(self.conn)
             if not job:
-                return
+                return processed
             processed += 1
             log_event(log, 20, "job claimed", job_id=job.job_id,
                       type=job.job_type, priority=job.priority,
@@ -94,6 +138,7 @@ class ServiceLoop:
                         "service.max_job_retries", 3)))
                 log_event(log, 40, "job failed", job_id=job.job_id,
                           type=job.job_type, error=str(exc))
+        return processed
 
     def _run_job(self, job_type: str, event_id: str | None) -> None:
         if job_type == JobType.SHORT_RENDER:
