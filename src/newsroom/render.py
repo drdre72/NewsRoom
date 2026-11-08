@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import sqlite3
 import subprocess
@@ -46,6 +47,18 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: fh.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _compose_atomic(timeline: Timeline, out: Path, settings: Settings,
+                    ass_path: Path) -> None:
+    """Encode to a sibling .part file, then os.replace — a reader (the
+    playout) only ever sees a complete MP4, never one mid-write."""
+    tmp = out.with_suffix(".part.mp4")
+    try:
+        compose_short(timeline, tmp, settings, ass_path=ass_path)
+        os.replace(tmp, out)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def _concat_audio(paths: list[Path], out: Path, gap_s: float = _GAP_S) -> Path:
@@ -212,7 +225,7 @@ def render_short(
     slug = "".join(c if c.isalnum() else "_" for c in slug)[:40].strip("_")
     out = output_dir() / "shorts" / f"{slug}_r{rev}_short.mp4"
     out.parent.mkdir(parents=True, exist_ok=True)
-    compose_short(timeline, out, settings, ass_path=ass)
+    _compose_atomic(timeline, out, settings, ass_path=ass)
 
     # --- manifest + gate ---------------------------------------------------
     manifest = {
@@ -422,7 +435,7 @@ def render_longform(
     slug = "".join(c if c.isalnum() else "_" for c in slug)[:40].strip("_")
     out = output_dir() / "longform" / f"{slug}_r{rev}_longform.mp4"
     out.parent.mkdir(parents=True, exist_ok=True)
-    compose_short(timeline, out, settings, ass_path=ass)
+    _compose_atomic(timeline, out, settings, ass_path=ass)
 
     # --- manifest + gate (with YouTube chapter markers) ---------------
     manifest = {
@@ -589,7 +602,7 @@ def render_from_recipe(
         if out.exists():
             raise RuntimeError(f"restore target already exists: {out}")
     out.parent.mkdir(parents=True, exist_ok=True)
-    compose_short(timeline, out, settings, ass_path=ass)
+    _compose_atomic(timeline, out, settings, ass_path=ass)
 
     # --- chapters (longform): stored first-segment indices re-resolve ---
     chapters = script.extra.get("chapters") or []

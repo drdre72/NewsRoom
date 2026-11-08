@@ -105,6 +105,13 @@ class BroadcastDirector:
         self._airing_replay = False
         if rc != 0 and not interrupted and not self._stop:
             log_event(log, 40, "playout encode failed", error=err)
+            # Ground the file: a corrupt/missing MP4 must leave every
+            # picker or the channel retries it forever. A successful
+            # re-render mints a fresh asset row that airs normally.
+            blocked = repo.block_asset_path(
+                self.conn, program.asset_path, err)
+            log_event(log, 40, "asset blocked off air",
+                      path=program.asset_path, rows=blocked)
             self._set_state(BroadcastState.DEGRADED,
                             f"encode error: {err[:120]}")
             return

@@ -382,10 +382,13 @@ def latest_video_asset(conn: sqlite3.Connection, event_id: str,
     # Long-form uses the same "video" kind but is not a broadcast Short.
     # Archived (dehydrated) assets are excluded: their files are gone and
     # they must leave air rotation until a restore re-renders them.
+    # air_blocked rows failed an on-air encode — they stay out of every
+    # picker; a successful re-render mints a fresh row that airs fine.
     return conn.execute(
         "SELECT * FROM assets WHERE event_id=? AND revision=? AND kind='video'"
         " AND COALESCE(json_extract(meta_json, '$.format'), 'short')='short'"
         " AND COALESCE(json_extract(meta_json, '$.archived'), 0)=0"
+        " AND COALESCE(json_extract(meta_json, '$.air_blocked'), 0)=0"
         " ORDER BY created_at DESC LIMIT 1", (event_id, revision),
     ).fetchone()
 
@@ -416,6 +419,19 @@ def set_asset_sha(conn: sqlite3.Connection, asset_id: str,
     """Correct a drifted recorded hash — the file on disk is the truth."""
     conn.execute("UPDATE assets SET sha256=? WHERE asset_id=?",
                  (sha256, asset_id))
+
+
+def block_asset_path(conn: sqlite3.Connection, path: str,
+                     reason: str) -> int:
+    """Mark every asset row pointing at a path that failed on air —
+    one corrupt/missing file must not wedge the whole channel."""
+    cur = conn.execute(
+        "UPDATE assets SET meta_json=json_patch(meta_json, ?)"
+        " WHERE kind='video' AND path=?",
+        (json.dumps({"air_blocked": 1, "blocked_reason": reason[:200],
+                     "blocked_at": utcnow()}), path),
+    )
+    return cur.rowcount
 
 
 def story_for_render(conn: sqlite3.Connection, event_id: str,
