@@ -10,11 +10,16 @@ import json
 import sqlite3
 import time
 
+import truststore
+
 from ..config import Settings
 from ..logging import get_logger, log_event
 from .adapters import adapter_for
 
 log = get_logger("polling")
+# Use macOS Keychain roots for verified HTTPS in the uv-managed Python.
+# The default OpenSSL bundle can lack locally trusted network roots.
+truststore.inject_into_ssl()
 _last_successful_poll: dict[str, float] = {}
 
 

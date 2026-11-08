@@ -1409,6 +1409,7 @@ source = { editable = "." }
 dependencies = [
     { name = "pillow" },
     { name = "pyyaml" },
+    { name = "truststore" },
 ]
 
 [package.optional-dependencies]
@@ -1431,6 +1432,7 @@ requires-dist = [
     { name = "playwright", marker = "extra == 'maps'", specifier = ">=1.45.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.0" },
     { name = "pyyaml", specifier = ">=6.0.1" },
+    { name = "truststore", specifier = ">=0.10.0" },
 ]
 provides-extras = ["tts", "maps", "dev"]
 
