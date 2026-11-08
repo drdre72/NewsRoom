@@ -82,7 +82,8 @@ copies; rerun install):
 
 - `com.newsroom.core` — `main.py run --poll`: ingestion, intelligence,
   render-queue drain (`RunAtLoad`, `KeepAlive` unconditional — even a clean
-  SIGTERM respawns; these are always-on services)
+  SIGTERM respawns; these are always-on services). The loop polls between
+  individual render jobs so a large render backlog cannot starve feeds.
 - `com.newsroom.broadcast` — `main.py broadcast`: the Director + HLS playout
   writing `output/preview/live.m3u8`. Each program airs inside a rendered
   16:9 channel frame (branding, impact chip, provenance, ticker); an RTMP
@@ -105,6 +106,27 @@ Logs land in `logs/` (JSON lines) plus per-service stdout/stderr
 the broadcast process holds an `flock` on `output/preview/director.lock`;
 a second `main.py broadcast` exits immediately rather than corrupt the
 playlist.
+
+### Outbound network filters
+
+If `logs/core.err.log` reports `[Errno 9] Bad file descriptor` for every
+source while `python main.py run --once` works in a Terminal, check the
+network filter before changing Python, TLS settings, or source adapters.
+On this Mac, a temporary same-user LaunchAgent connected to localhost
+but failed outbound; kernel logs showed `CFM_OP_DROP` on the core Python
+process and TripMode's active FilterExtension. The policy, not the
+newsroom HTTP client, blocked the connections.
+
+Allow outbound access for the launchd Python executable in TripMode for
+the active network. The installed core agent runs
+`/Users/andrebaker/Documents/newsroom/.venv/bin/python`, which resolves
+to the uv-managed `python3.12` under
+`/Users/andrebaker/.local/share/uv/python/`. Approve the actual Python
+process if TripMode lists it by that resolved path. Do not disable the
+network filter globally or turn off TLS verification. Once allowed,
+confirm that `logs/core.err.log` shows `poll complete` for sources rather
+than repeated socket errors; the core agent already retries every cycle.
+`doctor` checks local dependencies, not launchd outbound permission.
 
 ### Local preview
 

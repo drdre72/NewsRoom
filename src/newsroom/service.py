@@ -40,6 +40,7 @@ class ServiceLoop:
         self.install_signal_handlers()
         log_event(log, 20, "core service started", interval=interval)
         while not self._stop:
+            cycle_started = time.monotonic()
             try:
                 report = poll_once(self.conn, self.settings, ingest_observation)
                 if report["errors"]:
@@ -47,8 +48,11 @@ class ServiceLoop:
                               errors=len(report["errors"]))
             except Exception as exc:  # noqa: BLE001 — service must not die
                 log_event(log, 40, "poll cycle failed", error=str(exc))
-            self.drain_jobs()
-            self._sleep(interval)
+            # A backlog must not delay the next source poll until every
+            # render finishes. One render at a time still preserves the
+            # Apple Silicon memory budget.
+            self.drain_jobs(max_jobs=1)
+            self._sleep(max(0, int(interval - (time.monotonic() - cycle_started))))
         log_event(log, 20, "core service stopped")
 
     def _sleep(self, seconds: int) -> None:
@@ -58,13 +62,17 @@ class ServiceLoop:
                 return
             time.sleep(1)
 
-    def drain_jobs(self) -> None:
-        """Run queued jobs serially until empty or stopped (§72)."""
+    def drain_jobs(self, max_jobs: int | None = None) -> None:
+        """Run queued jobs serially; optionally yield to the next poll."""
         from .storage import repositories as repo
+        processed = 0
         while not self._stop:
+            if max_jobs is not None and processed >= max_jobs:
+                return
             job = repo.claim_next_job(self.conn)
             if not job:
                 return
+            processed += 1
             log_event(log, 20, "job claimed", job_id=job.job_id,
                       type=job.job_type, priority=job.priority,
                       event_id=job.event_id)
