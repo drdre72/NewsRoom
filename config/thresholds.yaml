@@ -183,8 +183,7 @@ impact:
   # needs corroboration, same as every press path.
   crime_report:
     severity:   {weight: 0.55, min: 0, max: 1}        # reads severity_norm
-    category:   {weight: 0.35, default: 0.45,
-                 values: {"google news": 0.55}}
+    category:   {weight: 0.35, default: 0.50}        # original outlet varies
 
   levels:            # score -> level (first match wins, top-down)
     FLASH: 0.85

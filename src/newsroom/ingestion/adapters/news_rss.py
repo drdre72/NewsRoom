@@ -87,12 +87,19 @@ class NewsRssAdapter(SourceAdapter):
         out = []
         for item in root.iter("item"):
             link = item.findtext("link") or item.findtext("guid") or ""
+            raw_title = _clean(item.findtext("title"))
+            source_el = item.findtext("source") or ""
+            # Google News titles end with " - Source"; strip it since we
+            # carry the source separately and credit the original outlet.
+            if " - " in raw_title and source_el:
+                raw_title = raw_title.rsplit(" - ", 1)[0].strip()
             out.append({
-                "title": _clean(item.findtext("title")),
+                "title": raw_title,
                 "link": link.strip(),
                 "published": _iso_pub(item.findtext("pubDate") or ""),
                 "summary": _clean(item.findtext("description"))[:_MAX_SUMMARY],
                 "guid": (item.findtext("guid") or "").strip(),
+                "source": source_el.strip(),
             })
         for entry in root.iter(f"{_ATOM}entry"):
             link = ""
@@ -143,7 +150,11 @@ class NewsRssAdapter(SourceAdapter):
         link = item.get("link", "").strip()
         if not title:
             return None
-        outlet = self.config.get("outlet", self.name)
+        # Credit the original reporting source, not the aggregator.
+        # Google News RSS carries a <source> element (Reuters, AP, etc.);
+        # the configured outlet is the fallback for direct feeds (BBC, etc.).
+        original_source = item.get("source", "").strip()
+        outlet = original_source or self.config.get("outlet", self.name)
         key = hashlib.sha1(
             (item.get("guid") or link or title).encode()).hexdigest()[:16]
         snorm = self._snorm(title)

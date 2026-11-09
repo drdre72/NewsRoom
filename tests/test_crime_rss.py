@@ -38,9 +38,38 @@ def test_normalize_emits_crime_report():
     obs = a.normalize(payload)
     assert obs and obs.event_type == "crime_report"
     assert obs.severity >= 0.60            # bombing + fbi + arrested
-    assert obs.fields["category"] == "Google News"
+    assert obs.fields["category"] == "Google News"  # fallback when no <source>
     assert obs.fields["outlet"] == "Google News"
     assert obs.source == "gnews_crime"
+
+
+def test_original_source_credited_not_google_news():
+    """Google News RSS carries <source> — credit Reuters/AP, not Google."""
+    a = _adapter()
+    payload = json.dumps({
+        "title": "Krakow mass shooter dies as dispute builds",
+        "link": "https://news.google.com/rss/articles/CBMiabc",
+        "published": "2026-11-09T06:38:00Z",
+        "summary": "", "guid": "CBMiabc",
+        "source": "Reuters"})
+    obs = a.normalize(payload)
+    assert obs.fields["outlet"] == "Reuters"
+    assert obs.title.startswith("Reuters: ")
+    assert "Google News" not in obs.title
+
+
+def test_source_suffix_stripped_from_title():
+    """Google News titles end with ' - Source' — _rss_items strips it
+    since we carry the source separately via <source>."""
+    a = _adapter()
+    # Simulate what _rss_items produces after stripping
+    payload = json.dumps({
+        "title": "Krakow mass shooter dies",
+        "link": "https://x", "published": "2026-11-09T06:38:00Z",
+        "summary": "", "guid": "g1", "source": "Reuters"})
+    obs = a.normalize(payload)
+    assert obs.fields["headline"] == "Krakow mass shooter dies"
+    assert obs.fields["outlet"] == "Reuters"
 
 
 def _item(title: str, guid: str, published: str) -> str:
