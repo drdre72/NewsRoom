@@ -42,6 +42,7 @@ def test_ffmpeg_args_copy_and_playlist(settings, monkeypatch):
     args = _ffmpeg_args(Path("/tmp/live.m3u8"), "rtmp://k")
     assert args[:1] == [args[0]]
     joined = " ".join(args)
-    assert "-c copy" in joined and "-f flv" in joined
+    assert "-c:v copy" in joined and "-f flv" in joined
+    assert "aresample=async" in joined   # fills program-boundary audio gaps
     assert str(Path("/tmp/live.m3u8")) in args
     assert "-re" in args and "shell" not in joined

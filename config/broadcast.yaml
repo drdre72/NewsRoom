@@ -51,7 +51,7 @@ playout:
   # to ~1.5 Mbps on the mostly-static newsroom picture, which ingest
   # rejects as insufficient. Software encode at 1080p30/veryfast is cheap.
   encoder: libx264
-  preset: veryfast
+  preset: ultrafast          # render drain competes for CPU; CBR hides the quality hit on static content
   video_bitrate: 6800k         # YouTube's recommended floor for 1080p30
   bufsize: 13600k
   gop_seconds: 2               # keyframe every 2 s (ingest recommendation)

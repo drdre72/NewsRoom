@@ -50,12 +50,17 @@ def rtmp_url(settings: Settings) -> str | None:
 
 
 def _ffmpeg_args(playlist: Path, url: str) -> list[str]:
-    """Read the live playlist near its edge; remux, don't re-encode.
-    rw_timeout recycles the ffmpeg when the network write stalls."""
+    """Read the live playlist near its edge. Video is copied; audio is
+    re-encoded through aresample=async so each program boundary's AAC
+    priming gap is filled — otherwise every join clicks/stutters on
+    YouTube. rw_timeout recycles the ffmpeg when the write stalls."""
     return [
         ffmpeg.ffmpeg_path(), "-hide_banner", "-loglevel", "error",
         "-re", "-live_start_index", "-3", "-i", str(playlist),
-        "-c", "copy", "-rw_timeout", "15000000",
+        "-c:v", "copy",
+        "-af", "aresample=async=1:first_pts=0",
+        "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-ac", "2",
+        "-rw_timeout", "15000000",
         "-f", "flv", url,
     ]
 

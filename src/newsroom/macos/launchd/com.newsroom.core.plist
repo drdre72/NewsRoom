@@ -16,6 +16,7 @@
     <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     <key>NEWSROOM_ROOT</key><string>@ROOT@</string>
   </dict>
+  <key>Nice</key><integer>15</integer>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>30</integer>
