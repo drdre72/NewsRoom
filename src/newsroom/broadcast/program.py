@@ -19,7 +19,7 @@ from ..storage import repositories as repo
 SEGMENT_TYPES = {
     "crime": ["crime_report"],
     "earthquakes": ["earthquake"],
-    "world_weather": ["weather_alert"],
+    # Weather is relegated to the rolling ticker strip — no segment.
     "international": ["wildfire", "volcano", "severe_storm", "flood",
                       "landslide", "snow", "drought", "sea_ice",
                       "temp_extreme", "tropical_cyclone", "tsunami_warning",
@@ -160,6 +160,9 @@ def pick_replay(conn: sqlite3.Connection, settings: Settings) -> Program | None:
     for row in rows:
         ev = repo.get_event(conn, row["event_id"])
         if not ev or ev.confidence_score < min_conf:
+            continue
+        # Weather lives in the ticker strip, not the replay pool.
+        if ev.event_type == "weather_alert":
             continue
         asset = repo.latest_video_asset(conn, ev.event_id,
                                         ev.current_revision)

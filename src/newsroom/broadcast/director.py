@@ -130,19 +130,20 @@ class BroadcastDirector:
             w, h, _ = self.playout._geom()
             ev = repo.get_event(self.conn, program.event_id) \
                 if program.event_id else None
+            source_url = self._source_url(program.event_id)
             frame = cache_dir() / "frames" / \
                 f"frame_{abs(hash((program.event_id, program.revision)))}.png"
             render_frame(
                 frame, w, h,
                 title=program.title,
                 level=program.level or "NORMAL",
-                source_line=(ev.source_ids[0] if ev and ev.source_ids
-                             else "authoritative feed"),
+                source_line=(source_url or
+                             (ev.source_ids[0] if ev and ev.source_ids
+                              else "authoritative feed")),
                 detail_lines=[
                     f"revision {program.revision}" if program.revision else "",
                     (ev.event_type.replace("_", " ") if ev else "")],
-                ticker="monitoring authoritative feeds — "
-                       "facts verified against the fact ledger",
+                ticker=self._weather_ticker(),
                 live=program.kind != "replay",
             )
             return frame
@@ -150,6 +151,24 @@ class BroadcastDirector:
             log_event(log, 30, "frame render failed; plain pillarbox",
                       error=str(exc))
             return None
+
+    def _weather_ticker(self) -> str:
+        """Build a rolling weather strip from active alerts — never read
+        by TTS, just displayed in the lower-third ticker bar. This is
+        where weather lives now: visible but not consuming airtime."""
+        rows = self.conn.execute(
+            """SELECT e.title, e.impact_level FROM events e
+               WHERE e.event_type = 'weather_alert'
+                 AND e.status = 'active'
+               ORDER BY CASE e.impact_level
+                   WHEN 'FLASH' THEN 0 WHEN 'BREAKING' THEN 1
+                   ELSE 2 END
+               LIMIT 8"""
+        ).fetchall()
+        if not rows:
+            return "monitoring authoritative feeds — facts verified"
+        items = [f"{r['impact_level']}: {r['title'][:50]}" for r in rows]
+        return "  •  ".join(items)
 
     def _should_cut(self) -> bool:
         """Mid-program preemption (§33): only a *different* FLASH revision

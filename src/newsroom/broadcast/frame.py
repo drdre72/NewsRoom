@@ -103,9 +103,25 @@ def render_frame(out: Path, width: int, height: int, *,
         draw.text((rx, ry), line, font=f_mono, fill=PALETTE["muted"])
         ry += 42
     if source_line:
-        for line in _wrap(draw, source_line, f_mono, rw)[:2]:
-            draw.text((rx, ry), line, font=f_mono, fill=PALETTE["muted"])
-            ry += 42
+        # If the source line is a URL, render it in a distinct box so
+        # viewers can see/click the originating source. Otherwise it's
+        # a plain attribution line.
+        is_url = source_line.startswith("http")
+        if is_url:
+            url_display = source_line.replace("https://", "").replace("http://", "")
+            if len(url_display) > 45:
+                url_display = url_display[:42] + "…"
+            box_w = draw.textbbox((0, 0), url_display, font=f_mono)[2] + 32
+            draw.rounded_rectangle([rx, ry, rx + box_w, ry + 40],
+                                   radius=6, fill=PALETTE["bg2"],
+                                   outline=PALETTE["border"], width=1)
+            draw.text((rx + 16, ry + 6), url_display, font=f_mono,
+                      fill=PALETTE["accent"])
+            ry += 56
+        else:
+            for line in _wrap(draw, source_line, f_mono, rw)[:2]:
+                draw.text((rx, ry), line, font=f_mono, fill=PALETTE["muted"])
+                ry += 42
     # window outline — the Short composites inside this panel
     draw.rectangle([WINDOW_X - 4, WINDOW_Y - 4,
                     WINDOW_X + WINDOW_W + 4, WINDOW_Y + WINDOW_H + 4],

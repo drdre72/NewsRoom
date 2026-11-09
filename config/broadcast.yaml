@@ -4,7 +4,9 @@ rundown:
   segments:
     - {id: crime,            title: "Crime Desk",         priority: 90, max_air_every_min: 15}
     - {id: headlines,        title: "Top Stories",        priority: 60, max_air_every_min: 30}
-    - {id: world_weather,    title: "Global Weather",     priority: 30, max_air_every_min: 45}
+    # Weather is relegated to the rolling ticker strip (lower third,
+    # unread by TTS) — it no longer airs as full stories. FLASH weather
+    # (tornado warnings, etc.) still interrupts via pick_interrupt.
     - {id: earthquakes,      title: "Earthquake Activity", priority: 50, max_air_every_min: 20}
     - {id: international,    title: "International",      priority: 30, max_air_every_min: 60}
     - {id: space_weather,    title: "Space Weather",      priority: 20, max_air_every_min: 90}
