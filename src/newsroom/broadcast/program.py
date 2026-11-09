@@ -58,6 +58,9 @@ def _eligible_events(conn: sqlite3.Connection, settings: Settings,
             seen.add(ev.event_id)
             if ev.confidence_score < min_conf:
                 continue
+            if (ev.event_type == "weather_alert" or
+                    repo.has_restricted_source(conn, ev.event_id)):
+                continue
             if not repo.latest_video_asset(
                     conn, ev.event_id, ev.current_revision):
                 continue
@@ -83,6 +86,8 @@ def pick_interrupt(conn: sqlite3.Connection, settings: Settings) -> Program | No
     flash_min = float(interrupt.get("flash_min_confidence", 0.95))
     break_min = float(interrupt.get("breaking_min_confidence", 0.90))
     for ev in repo.list_events(conn, limit=50):
+        if repo.has_restricted_source(conn, ev.event_id):
+            continue
         need = flash_min if ev.impact_level == "FLASH" else \
             break_min if ev.impact_level == "BREAKING" else None
         if need is None or ev.confidence_score < need:
@@ -160,6 +165,8 @@ def pick_replay(conn: sqlite3.Connection, settings: Settings) -> Program | None:
     for row in rows:
         ev = repo.get_event(conn, row["event_id"])
         if not ev or ev.confidence_score < min_conf:
+            continue
+        if repo.has_restricted_source(conn, ev.event_id):
             continue
         # Weather lives in the ticker strip, not the replay pool.
         if ev.event_type == "weather_alert":

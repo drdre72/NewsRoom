@@ -184,6 +184,15 @@ def get_event_source_ids(conn: sqlite3.Connection, event_id: str) -> list[str]:
     return [f"{r['source']}:{r['source_event_id']}" for r in rows]
 
 
+def has_restricted_source(conn: sqlite3.Connection, event_id: str) -> bool:
+    """Keep historical Google News-derived evidence off commercial outputs."""
+    return conn.execute(
+        "SELECT 1 FROM event_sources WHERE event_id=?"
+        " AND source IN ('gnews_crime', 'gnews_federal') LIMIT 1",
+        (event_id,),
+    ).fetchone() is not None
+
+
 def candidate_events_for_fusion(
     conn: sqlite3.Connection, event_type: str, since_iso: str
 ) -> list[CanonicalEvent]:

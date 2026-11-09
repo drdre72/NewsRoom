@@ -322,6 +322,9 @@ class TestUploadEligible:
                           row["event_id"], row["revision"], {})
         asset("crime_report:simnws1")
         asset("crime_report:rejected", verdict="reject")
+        asset("crime_report:gnews")
+        repo.add_event_source(conn, "crime_report:gnews",
+                              "gnews_crime", "article")
         asset("crime_report:fixture")
         conn.execute(
             """INSERT INTO observations
@@ -346,6 +349,18 @@ class TestUploadEligible:
 
 
 class TestBestOfDay:
+    def test_restricted_press_and_weather_not_promoted(self, conn, settings):
+        from newsroom.storage import repositories as repo
+        _seed(conn, "crime_report:google", "FLASH", 0.99, airs=1)
+        repo.add_event_source(conn, "crime_report:google",
+                              "gnews_federal", "article")
+        _seed(conn, "weather_alert:urgent", "FLASH", 0.98, airs=1)
+        conn.execute("UPDATE events SET event_type='weather_alert' WHERE event_id=?",
+                     ("weather_alert:urgent",))
+        _seed(conn, "crime_report:direct", "UPDATE", 0.45, airs=1)
+        assert [row["event_id"] for row in select_best_of_day(conn, settings)] == [
+            "crime_report:direct"]
+
     def test_high_impact_most_aired_wins(self, conn, settings):
         _seed(conn, "crime_report:big", "FLASH", 0.95, airs=5)
         _seed(conn, "weather_alert:small", "NORMAL", 0.2, airs=50)

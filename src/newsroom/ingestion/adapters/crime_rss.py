@@ -6,9 +6,9 @@ so the rundown can schedule them under the top-priority Crime segment.
 Severity is phrase-scored, not word-scored: the phrases that matter in
 crime coverage ("mass shooting", "amber alert", "federal indictment")
 are multi-word and can't be caught by the single-word boost table.
-Federal press sites (DOJ/FBI/DEA/ATF) are WAF-blocked to programmatic
-fetch, so the live inputs are Google News RSS queries — aggregated
-attribution, never asserted fact, same as the other press adapters.
+The Google News-backed instances are disabled for commercial-use rights.
+Official DOJ releases now use this adapter's crime scoring and attribution
+through DojPressAdapter, without an aggregation layer.
 """
 from __future__ import annotations
 

@@ -100,6 +100,24 @@ def _seed_event(conn: sqlite3.Connection, event_id: str, event_type: str,
 
 
 class TestProgramSelection:
+    def test_google_news_history_never_airs(self, conn, settings):
+        _seed_event(conn, "crime:gnews", "crime_report", "FLASH", 0.99, 0.99)
+        repo.add_event_source(conn, "crime:gnews", "gnews_crime", "article")
+        assert prog.pick_interrupt(conn, settings) is None
+        assert prog.pick_next(conn, settings) is None
+        repo.log_air(conn, "gnews-air", "story", "crime:gnews", 1,
+                     "crime", "/tmp/x.mp4", 30.0)
+        assert prog.pick_replay(conn, settings) is None
+
+    def test_headlines_cannot_nominate_weather_but_flash_can_interrupt(
+            self, conn, settings):
+        _seed_event(conn, "nws:flash", "weather_alert", "FLASH", 0.99, 0.99)
+        assert prog.pick_next(conn, settings) is None
+        assert prog.pick_interrupt(conn, settings).event_id == "nws:flash"
+        repo.log_air(conn, "weather-air", "interrupt", "nws:flash", 1,
+                     None, "/tmp/x.mp4", 30.0)
+        assert prog.pick_replay(conn, settings) is None
+
     def test_flash_interrupt_picked(self, conn, settings):
         _seed_event(conn, "eq:flash", "earthquake", "FLASH", 0.95, 0.96)
         p = prog.pick_interrupt(conn, settings)

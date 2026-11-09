@@ -233,16 +233,23 @@ sources:
       posts: https://okeefemediagroup.com/wp-json/wp/v2/posts?per_page=15
     poll_feed: posts
 
-  # Crime desk (§53) — Google News RSS queries aggregate local + national
-  # crime coverage within minutes of publication. Federal press sites
-  # (DOJ/FBI/DEA/ATF/USMS) are WAF-blocked to programmatic fetches, so
-  # aggregation is the honest path. Emits `crime_report` events: headline
-  # phrases score into BREAKING band; press-level confidence keeps them
-  # out of the interrupt gate until corroborated.
+  doj_press:
+    kind: doj_press
+    authority: 0.85
+    enabled: true
+    outlet: "U.S. Department of Justice"
+    poll_every_seconds: 900
+    max_items: 20
+    feeds:
+      releases: https://www.justice.gov/api/v1/press_releases.json?pagesize=20&sort=date&direction=DESC
+    poll_feed: releases
+
+  # Historical Google News crime feeds (§53) — retained for audit only.
+  # The RSS terms restrict commercial use; do not poll or air these items.
   gnews_crime:
     kind: crime_rss
     authority: 0.55      # aggregation layer, not a primary source
-    enabled: true
+    enabled: false  # Non-commercial Google News RSS terms; preserve historical evidence only.
     format: rss
     outlet: "Google News"
     poll_every_seconds: 600
@@ -254,7 +261,7 @@ sources:
   gnews_federal:
     kind: crime_rss
     authority: 0.55
-    enabled: true
+    enabled: false  # Do not resume without a permitted commercial source/license.
     format: rss
     outlet: "Google News"
     poll_every_seconds: 600

@@ -406,6 +406,10 @@ def upload_eligible(conn: sqlite3.Connection, settings: Settings,
              AND a.revision = e.current_revision
              AND e.status NOT IN ('cancelled')
              AND e.event_type != 'weather_alert'
+             AND NOT EXISTS (
+               SELECT 1 FROM event_sources es WHERE es.event_id=a.event_id
+                 AND es.source IN ('gnews_crime', 'gnews_federal')
+             )
              AND COALESCE(json_extract(a.meta_json, '$.archived'), 0)=0
              AND COALESCE(json_extract(a.meta_json, '$.air_blocked'), 0)=0
              AND COALESCE(json_extract(a.meta_json, '$.youtube_id'), '')=''
@@ -478,6 +482,11 @@ def select_best_of_day(conn: sqlite3.Connection,
            JOIN air_log a ON a.event_id = e.event_id
            WHERE a.started_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day')
              AND a.kind != 'replay'
+             AND e.event_type != 'weather_alert'
+             AND NOT EXISTS (
+               SELECT 1 FROM event_sources es WHERE es.event_id=e.event_id
+                 AND es.source IN ('gnews_crime', 'gnews_federal')
+             )
            GROUP BY e.event_id
            ORDER BY e.impact_score * (1 + CAST(air_count AS REAL) / 10) DESC
            LIMIT ?""",

@@ -153,6 +153,11 @@ class ServiceLoop:
             log_event(log, 20, "job claimed", job_id=job.job_id,
                       type=job.job_type, priority=job.priority,
                       event_id=job.event_id)
+            if job.event_id and repo.has_restricted_source(self.conn, job.event_id):
+                repo.complete_job(self.conn, job.job_id)
+                log_event(log, 30, "restricted-source render skipped",
+                          event_id=job.event_id, job_id=job.job_id)
+                continue
             try:
                 self._run_job(job.job_type, job.event_id)
                 repo.complete_job(self.conn, job.job_id)
