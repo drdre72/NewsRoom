@@ -1,7 +1,9 @@
 """RTMP relay — gating and stream args. No network."""
 import os
 
-from newsroom.broadcast.rtmp_relay import _ffmpeg_args, rtmp_url
+from newsroom.broadcast.rtmp_relay import (
+    RtmpRelay, _ffmpeg_args, _newest_segment, rtmp_url,
+)
 
 
 def _on(settings):
@@ -46,3 +48,46 @@ def test_ffmpeg_args_copy_and_playlist(settings, monkeypatch):
     assert "aresample=async" in joined   # fills program-boundary audio gaps
     assert str(Path("/tmp/live.m3u8")) in args
     assert "-re" in args and "shell" not in joined
+
+
+def test_relay_encoder_stays_in_launchd_process_group(settings, monkeypatch):
+    import newsroom.broadcast.rtmp_relay as relay
+
+    spawned = []
+
+    class FinishedProcess:
+        pid = 123
+        returncode = 0
+
+        def poll(self):
+            return 0
+
+        def communicate(self):
+            return "", ""
+
+    def fake_popen(*args, **kwargs):
+        spawned.append(kwargs)
+        return FinishedProcess()
+
+    monkeypatch.setattr(relay.subprocess, "Popen", fake_popen)
+    instance = RtmpRelay(settings)
+    assert instance._stream("rtmp://example/stream") == 0
+    assert spawned[0].get("start_new_session") is not True
+
+
+def test_newest_segment_survives_concurrent_hls_trim(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    vanished = tmp_path / "seg_00001.ts"
+    remaining = tmp_path / "seg_00002.ts"
+    vanished.write_bytes(b"old")
+    remaining.write_bytes(b"new")
+    real_stat = Path.stat
+
+    def stat(path, *args, **kwargs):
+        if path == vanished:
+            raise FileNotFoundError(path)
+        return real_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", stat)
+    assert _newest_segment(tmp_path) == real_stat(remaining).st_mtime

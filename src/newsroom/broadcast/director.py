@@ -97,8 +97,12 @@ class BroadcastDirector:
         t0 = time.monotonic()
         self._airing = (program.event_id, program.revision)
         self._airing_replay = program.kind == "replay"
-        frame = self._program_frame(program)
-        self.playout.air_video(Path(program.asset_path), frame=frame)
+        ticker_text = self._weather_ticker()
+        ticker = self._ticker_strip(ticker_text)
+        frame = self._program_frame(
+            program, ticker=None if ticker else ticker_text)
+        self.playout.air_video(Path(program.asset_path), frame=frame,
+                               ticker=ticker)
         rc, err = self.playout.wait(stop_check=self._should_cut)
         dur = time.monotonic() - t0
         interrupted = self._interrupt_now
@@ -123,7 +127,8 @@ class BroadcastDirector:
                      interrupted=interrupted)
         self._set_state(BroadcastState.NORMAL_PROGRAMMING, "between programs")
 
-    def _program_frame(self, program: prog.Program) -> Path | None:
+    def _program_frame(self, program: prog.Program,
+                       ticker: str | None) -> Path | None:
         """Per-program channel chrome — title/level/source baked in."""
         try:
             from .frame import render_frame
@@ -143,12 +148,28 @@ class BroadcastDirector:
                 detail_lines=[
                     f"revision {program.revision}" if program.revision else "",
                     (ev.event_type.replace("_", " ") if ev else "")],
-                ticker=self._weather_ticker(),
+                ticker=ticker,
                 live=program.kind != "replay",
             )
             return frame
         except Exception as exc:  # noqa: BLE001 — frame is chrome, not content
             log_event(log, 30, "frame render failed; plain pillarbox",
+                      error=str(exc))
+            return None
+
+    def _ticker_strip(self, ticker: str) -> Path | None:
+        """Transparent scrolling text tile for the lower third."""
+        try:
+            import hashlib
+            from .frame import render_ticker_strip, ticker_geometry
+            w, h, _ = self.playout._geom()
+            _, _, viewport_w, _ = ticker_geometry(w, h)
+            key = hashlib.sha1(ticker.encode()).hexdigest()[:12]
+            return render_ticker_strip(
+                cache_dir() / "frames" / f"ticker_{key}.png", ticker,
+                viewport_w)
+        except Exception as exc:  # noqa: BLE001 — ticker chrome is optional
+            log_event(log, 30, "ticker render failed; static fallback",
                       error=str(exc))
             return None
 
@@ -208,7 +229,8 @@ class BroadcastDirector:
         self._set_state(BroadcastState.NORMAL_PROGRAMMING,
                         "standby — monitoring sources", kind="standby")
         t0 = time.monotonic()
-        self.playout.air_slate(slate, standby_s)
+        ticker = self._ticker_strip(self._weather_ticker())
+        self.playout.air_slate(slate, standby_s, ticker=ticker)
         # standby yields to *anything* ready to air — a completed render
         # cuts the slate short within a poll interval, not after the full
         # slate duration

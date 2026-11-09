@@ -298,13 +298,41 @@ def enqueue_job(conn: sqlite3.Connection, job: Job) -> None:
     )
 
 
+def cancel_unairable_render_jobs(conn: sqlite3.Connection) -> int:
+    """Retain queued jobs in the audit trail, but do not render obsolete work."""
+    cur = conn.execute(
+        "UPDATE jobs AS j SET status='cancelled', completed_at=?,"
+        " error=CASE"
+        " WHEN NOT EXISTS (SELECT 1 FROM events e WHERE e.event_id=j.event_id)"
+        " THEN 'event missing'"
+        " WHEN EXISTS (SELECT 1 FROM events e WHERE e.event_id=j.event_id"
+        " AND e.current_revision IS NOT j.revision)"
+        " THEN 'superseded revision'"
+        " WHEN EXISTS (SELECT 1 FROM event_sources s WHERE s.event_id=j.event_id"
+        " AND s.source IN ('gnews_crime','gnews_federal'))"
+        " THEN 'restricted source'"
+        " ELSE 'weather ticker only' END"
+        " WHERE j.status='queued' AND j.job_type='SHORT_RENDER' AND ("
+        " NOT EXISTS (SELECT 1 FROM events e WHERE e.event_id=j.event_id)"
+        " OR EXISTS (SELECT 1 FROM events e WHERE e.event_id=j.event_id"
+        " AND e.current_revision IS NOT j.revision)"
+        " OR EXISTS (SELECT 1 FROM event_sources s WHERE s.event_id=j.event_id"
+        " AND s.source IN ('gnews_crime','gnews_federal'))"
+        " OR EXISTS (SELECT 1 FROM events e WHERE e.event_id=j.event_id"
+        " AND e.event_type='weather_alert'"
+        " AND e.impact_level NOT IN ('FLASH','BREAKING')))",
+        (utcnow(),),
+    )
+    return cur.rowcount
+
+
 def claim_next_job(conn: sqlite3.Connection, job_types: list[str] | None = None) -> Job | None:
     q = "SELECT * FROM jobs WHERE status='queued'"
     params: list[Any] = []
     if job_types:
         q += f" AND job_type IN ({','.join('?' * len(job_types))})"
         params.extend(job_types)
-    q += " ORDER BY priority, created_at LIMIT 1"
+    q += " ORDER BY priority, created_at DESC LIMIT 1"
     row = conn.execute(q, params).fetchone()
     if not row:
         return None

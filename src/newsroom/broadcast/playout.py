@@ -129,7 +129,20 @@ class HlsPlayout:
         return (int(p.get("width", 1920)), int(p.get("height", 1080)),
                 int(p.get("fps", 30)))
 
-    def air_video(self, src: Path, frame: Path | None = None) -> int:
+    def _ticker_overlay(self, base: str, ticker_index: int,
+                        height: int) -> list[str]:
+        """Scroll a transparent ticker tile across the lower third."""
+        from .frame import TICKER_H, TICKER_X
+        speed = int(self.settings.get("playout.ticker_speed", 110))
+        return [
+            f"[{ticker_index}:v]format=rgba[tick]",
+            f"{base}[tick]overlay=x={TICKER_X}-"
+            f"mod(t*{speed}\\,overlay_w):y={height - TICKER_H}:"
+            "eval=frame[v]",
+        ]
+
+    def air_video(self, src: Path, frame: Path | None = None,
+                  ticker: Path | None = None) -> int:
         w, h, fps = self._geom()
         if frame:
             # Channel chrome: still frame + content fitted into the window
@@ -137,25 +150,51 @@ class HlsPlayout:
             from .frame import WINDOW_H, WINDOW_W
             inputs = ["-re", "-loop", "1", "-i", str(frame),
                       "-re", "-i", str(src)]
-            fc = (f"[1:v]scale={WINDOW_W}:{WINDOW_H}:"
-                  "force_original_aspect_ratio=decrease,"
-                  f"fps={fps},format=yuv420p[vid];"
-                  f"[0:v][vid]overlay=(W-w)/2:(H-h)/2:shortest=1[v]")
+            chains = [
+                f"[1:v]scale={WINDOW_W}:{WINDOW_H}:"
+                "force_original_aspect_ratio=decrease,"
+                f"fps={fps},format=yuv420p[vid]",
+            ]
+            base = "[base]" if ticker else "[v]"
+            chains.append(
+                f"[0:v][vid]overlay=(W-w)/2:(H-h)/2:shortest=1{base}")
+            if ticker:
+                inputs += ["-re", "-loop", "1", "-i", str(ticker)]
+                chains += self._ticker_overlay("[base]", 2, h)
             return self._start_program(
-                inputs, ["-filter_complex", fc, "-map", "[v]", "-map", "1:a?"])
+                inputs, ["-filter_complex", ";".join(chains),
+                         "-map", "[v]", "-map", "1:a?"])
         vf = (f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
               f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=0x0b1220,"
               f"fps={fps},format=yuv420p")
+        if ticker:
+            chains = [f"[0:v]{vf}[base]"]
+            chains += self._ticker_overlay("[base]", 1, h)
+            return self._start_program(
+                ["-re", "-i", str(src),
+                 "-re", "-loop", "1", "-i", str(ticker)],
+                ["-filter_complex", ";".join(chains),
+                 "-map", "[v]", "-map", "0:a?"])
         return self._start_program(["-re", "-i", str(src)], ["-vf", vf])
 
-    def air_slate(self, slate_png: Path, seconds: float) -> int:
+    def air_slate(self, slate_png: Path, seconds: float,
+                  ticker: Path | None = None) -> int:
         w, h, fps = self._geom()
         vf = f"scale={w}:{h},fps={fps},format=yuv420p"
-        return self._start_program([
+        inputs = [
             "-re", "-loop", "1", "-t", str(seconds), "-i", str(slate_png),
             "-re", "-f", "lavfi", "-t", str(seconds),
             "-i", "anullsrc=r=48000:cl=stereo", "-shortest",
-        ], ["-vf", vf])
+        ]
+        if ticker:
+            inputs += ["-re", "-loop", "1", "-t", str(seconds),
+                       "-i", str(ticker)]
+            chains = [f"[0:v]{vf}[base]"]
+            chains += self._ticker_overlay("[base]", 2, h)
+            return self._start_program(
+                inputs, ["-filter_complex", ";".join(chains),
+                         "-map", "[v]", "-map", "1:a"])
+        return self._start_program(inputs, ["-vf", vf])
 
     def _start_program(self, input_args: list[str],
                        vmap: list[str] | None = None) -> int:

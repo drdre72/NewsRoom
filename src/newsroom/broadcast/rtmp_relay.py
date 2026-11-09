@@ -69,7 +69,11 @@ def _newest_segment(hls_dir: Path) -> float:
     """mtime of the newest seg_*.ts, or 0 when the window is empty."""
     newest = 0.0
     for seg in hls_dir.glob("seg_*.ts"):
-        newest = max(newest, seg.stat().st_mtime)
+        try:
+            newest = max(newest, seg.stat().st_mtime)
+        except FileNotFoundError:
+            # The Director trims old HLS segments while this scan runs.
+            continue
     return newest
 
 
@@ -131,7 +135,7 @@ class RtmpRelay:
         self._proc = subprocess.Popen(
             _ffmpeg_args(self.playlist, url),
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE, text=True, start_new_session=True)
+            stderr=subprocess.PIPE, text=True)
         log_event(log, 20, "relay pushing", pid=self._proc.pid)
         while self._proc.poll() is None:
             if self._stop:

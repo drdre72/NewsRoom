@@ -228,13 +228,15 @@ def ingest_observation(
         event.confidence = event.confidence_score
         repo.upsert_event(conn, event)
 
-        # Auto-render gate (§72): revisions scoring high enough queue a
-        # SHORT_RENDER job inside the same transaction — a scored revision
-        # never exists without its render job. Deduped per (event, revision).
+        # Auto-render gate (§72): eligible revisions queue a SHORT_RENDER
+        # atomically. Ordinary weather belongs in the ticker, not the video
+        # queue; FLASH/BREAKING weather can still interrupt the broadcast.
         settings = load_settings()
         auto = settings.get("auto_render", {}) or {}
         levels = ["BACKGROUND", "NORMAL", "UPDATE", "BREAKING", "FLASH"]
-        if (levels.index(level) >= levels.index(auto.get("min_impact", "UPDATE"))
+        if (not (event.event_type == "weather_alert"
+                 and level not in ("FLASH", "BREAKING"))
+                and levels.index(level) >= levels.index(auto.get("min_impact", "UPDATE"))
                 and event.confidence_score >= float(
                     auto.get("min_confidence", 0.70))):
             dup = conn.execute(

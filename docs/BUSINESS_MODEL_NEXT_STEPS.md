@@ -19,14 +19,26 @@
 
 ## Next: make the channel worth watching
 
-1. Replace the press headline/time/developing-story template with
-   cited, event-specific explanation and uncertainty. No automatic
-   publication of unreviewed crime allegations or graphic material.
-2. Drain or supersede stale render jobs; prioritize the current revision
-   and genuinely new stories over replay volume. Check the post-restart
-   weather and restricted-source mix daily.
-3. Make the weather lower third truly scroll instead of clipping a static
-   string. Keep urgent official weather interrupts.
+1. Press fallback now uses a short, complete, attributed feed-summary
+   sentence when it adds distinct ledger-backed detail; otherwise it
+   stops at the attributed headline rather than padding with a date and
+   generic close. This is not independent verification or a full
+   explainer: pursue structured official-source detail and a reviewed
+   explanatory format before scaling. Review quotation/reuse rights per
+   publisher; no automatic publication of unreviewed crime allegations
+   or graphic material.
+2. The core now records obsolete queued renders as `cancelled` (with a
+   reason, without deleting jobs or facts): superseded revisions, restricted
+   sources and ticker-only weather. New ordinary weather revisions no longer
+   enqueue video renders; FLASH/BREAKING weather still does. Within each
+   priority band, newer jobs run first. Monitor whether current eligible
+   stories actually premiere rather than relying on replay volume, and
+   check the weather/restricted-source mix daily.
+3. Weather lower third now scrolls: the Director generates a transparent
+   ticker strip (PIL, same palette/font) per program and the playout overlays
+   it with a looping x-offset expression (`playout.ticker_speed`, 110 px/s).
+   Stories, plain pillarbox and standby slate all carry it. Verified via
+   pixel-diff across encoded frames. Urgent weather interrupts unchanged.
 4. Add one rights-reviewed original Short per day, one deeper weekly
    explainer and a YouTube Studio Related Video link from each Short to
    the live stream (Shorts description URLs are not clickable).

@@ -17,8 +17,42 @@ WINDOW_W = 608         # content window between header and ticker
 WINDOW_H = 888         # y = 96..984
 WINDOW_Y = 96
 WINDOW_X = (1920 - WINDOW_W) // 2   # 656
+TICKER_X = 40
+TICKER_H = 88
+TICKER_RESERVED_RIGHT = 340          # UTC clock + breathing room
+TICKER_FONT_SIZE = 30
 # Back-compat aliases for the playout scaler.
 VIDEO_W, VIDEO_X = WINDOW_W, WINDOW_X
+
+
+def ticker_geometry(width: int, height: int) -> tuple[int, int, int, int]:
+    """x, y, readable viewport width, height for the lower-third ticker."""
+    return (TICKER_X, height - TICKER_H,
+            max(320, width - TICKER_X - TICKER_RESERVED_RIGHT), TICKER_H)
+
+
+def render_ticker_strip(out: Path, text: str, viewport_width: int) -> Path:
+    """Transparent ticker tile whose text starts just outside its viewport.
+
+    FFmpeg scrolls this image across the lower third. The image width is
+    viewport + margin + text, so `x = -mod(t, overlay_w)` wraps only after
+    the last glyph has fully left the screen.
+    """
+    from PIL import Image, ImageDraw
+    probe = Image.new("RGB", (1, 1))
+    draw = ImageDraw.Draw(probe)
+    font = _font(_MONO_CANDIDATES, TICKER_FONT_SIZE)
+    text = " ".join((text or "monitoring authoritative sources").split())
+    margin = 40
+    text_w = draw.textbbox((0, 0), text, font=font)[2]
+    img = Image.new("RGBA", (viewport_width + margin + text_w, TICKER_H),
+                    (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    draw.text((viewport_width + margin, 24), text, font=font,
+              fill=PALETTE["muted"])
+    out.parent.mkdir(parents=True, exist_ok=True)
+    img.save(out, "PNG")
+    return out
 
 
 def _wrap(draw, text: str, font, max_w: int) -> list[str]:
@@ -38,7 +72,7 @@ def _wrap(draw, text: str, font, max_w: int) -> list[str]:
 
 def render_frame(out: Path, width: int, height: int, *,
                  title: str, level: str = "NORMAL",
-                 source_line: str = "", ticker: str = "",
+                 source_line: str = "", ticker: str | None = "",
                  detail_lines: list[str] | None = None,
                  live: bool = True) -> Path:
     from PIL import Image, ImageDraw
@@ -134,17 +168,16 @@ def render_frame(out: Path, width: int, height: int, *,
                   font=ty_font, fill=PALETTE["muted"])
 
     # -- ticker bar -----------------------------------------------------
-    ty = height - 88
+    tx, ty, ticker_w, _ = ticker_geometry(width, height)
     draw.rectangle([0, ty, width, height], fill=PALETTE["bg2"])
     draw.line([0, ty, width, ty], fill=PALETTE["border"], width=2)
     now = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
-    clock_w = draw.textbbox((0, 0), now, font=f_mono)[2]
-    max_ticker = width - 40 - clock_w - 100
-    tick = ticker or "monitoring authoritative sources"
-    while (tick and draw.textbbox((0, 0), tick, font=f_mono)[2]
-           > max_ticker):
-        tick = tick[:-2]
-    draw.text((40, ty + 24), tick, font=f_mono, fill=PALETTE["muted"])
+    if ticker is not None:
+        tick = ticker or "monitoring authoritative sources"
+        while (tick and draw.textbbox((0, 0), tick, font=f_mono)[2]
+               > ticker_w):
+            tick = tick[:-2]
+        draw.text((tx, ty + 24), tick, font=f_mono, fill=PALETTE["muted"])
     draw.text((width - 40, ty + 24), now, font=f_mono,
               fill=PALETTE["muted"], anchor="ra")
 

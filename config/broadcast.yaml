@@ -60,6 +60,7 @@ playout:
   gop_seconds: 2               # keyframe every 2 s (ingest recommendation)
   audio: aac
   audio_bitrate: 160k
+  ticker_speed: 110          # px/sec — readable crawl, not cable-news sprint
   # Local HLS preview (§34 dry-run output). Segments append to live.m3u8;
   # the preview server serves this directory over HTTP.
   hls:

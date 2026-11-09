@@ -142,6 +142,10 @@ class ServiceLoop:
         if not disk_health(self.settings)["ok"]:
             log_event(log, 40, "render paused: low disk space")
             return 0
+        cancelled = repo.cancel_unairable_render_jobs(self.conn)
+        if cancelled:
+            log_event(log, 20, "obsolete render jobs cancelled",
+                      count=cancelled)
         processed = 0
         while not self._stop:
             if max_jobs is not None and processed >= max_jobs:

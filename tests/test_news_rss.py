@@ -84,6 +84,48 @@ def test_news_template_attributes_and_validates(conn, bbc, settings):
     # Attribution is the first claim — no segment asserts the claim itself
     assert "killed" in script.segments[0].text
     assert script.segments[0].fact_ids
+    assert len(script.segments) == 2
+    assert "Rescue teams continue searching" in script.segments[1].text
+    facts = {f.field: f for f in ctx.current}
+    assert set(script.segments[1].fact_ids) == {
+        facts["outlet"].fact_id, facts["summary"].fact_id}
+    assert not any("published at" in s.text or "developing story" in s.text
+                   for s in script.segments)
+
+
+@pytest.mark.parametrize("summary", [
+    "Suspect charged in robbery.",
+    "Officials reported another detail about the case but the feed cut off",
+    "Officials reported another detail about the case and " + "more " * 40 + ".",
+])
+def test_news_template_does_not_pad_or_repeat_unusable_summary(
+    conn, bbc, settings, summary
+):
+    item = json.dumps({
+        "title": "Suspect charged in robbery", "link": "https://example.com/a",
+        "summary": summary, "published": "2026-11-07T14:00:00Z",
+    })
+    result = ingest_observation(conn, bbc, item, "fixture://bbc",
+                                "2026-11-07T15:00:00Z")
+    ctx = build_fact_context(conn, result["event_id"])
+    script = _script_from_template(ctx, plan_story(conn, ctx.event_id), settings)
+    assert len(script.segments) == 1
+    assert validate_script(script, ctx, settings)[0]
+
+
+def test_news_summary_claims_stay_attributed_and_numeric(conn, bbc, settings):
+    item = json.dumps({
+        "title": "Rescuers search after overnight strike",
+        "link": "https://example.com/b",
+        "summary": "Local officials report 12 people killed in the strike.",
+    })
+    result = ingest_observation(conn, bbc, item, "fixture://bbc",
+                                "2026-11-07T15:00:00Z")
+    ctx = build_fact_context(conn, result["event_id"])
+    script = _script_from_template(ctx, plan_story(conn, ctx.event_id), settings)
+    assert len(script.segments) == 2
+    assert script.segments[1].text.startswith("BBC World adds:")
+    assert validate_script(script, ctx, settings)[0]
 
 
 def test_wp_json_items(omg):

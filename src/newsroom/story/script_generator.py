@@ -7,6 +7,8 @@ validation (§37: reduced capability, never fabricated facts).
 """
 from __future__ import annotations
 
+import re
+
 from ..audio.pronunciation import to_speech_text
 from ..llm.ollama import OllamaClient
 from ..llm.schemas import SCRIPT_SCHEMA
@@ -408,11 +410,20 @@ def _news_template(ctx: FactContext, settings: Settings) -> Script:
             "outlet", "headline")
     elif head:
         add(f"Press coverage reports: {head.value_display}", "headline")
-    pub = f.get("published_at")
-    if pub and pub.value_display:
-        add(f"The report was published at {pub.value_display}.",
-            "published_at")
-    _developing_close(add)
+    summary = f.get("summary")
+    if summary and head:
+        text = str(summary.value_display).strip()
+        # RSS excerpts may be clipped at ingestion. Never air an incomplete
+        # sentence or fill the missing context with invented explanation.
+        sentence = re.split(r"(?<=[.!?])\s+", text, maxsplit=1)[0]
+        headline_words = set(re.findall(r"\w+", str(head.value_display).lower()))
+        detail_words = set(re.findall(r"\w+", sentence.lower()))
+        if (len(sentence) <= 180 and sentence.endswith((".", "!", "?"))
+                and len(detail_words) >= 6
+                and len(detail_words - headline_words) >= 4):
+            name = str(outlet.value_display) if outlet else "The source"
+            add(f"{name} adds: {sentence}", "summary",
+                *(["outlet"] if outlet else []))
     name = outlet.value_display if outlet else "Press"
     return Script(headline=f"{name} — {head.value_display}" if head else
                   f"{name} report",
