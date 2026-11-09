@@ -51,7 +51,14 @@ def _correlate(
     existing = repo.get_event_by_source_id(conn, obs.source, obs.source_event_id)
     if existing:
         return existing, "source id match"
-    since = _window_start(obs.occurred_at, settings)
+    # Press coverage of one story arrives over hours, not the sensor
+    # window — headline-similar fusion needs a full-day candidate span.
+    if obs.event_type in ("news_report", "crime_report"):
+        lookback = float(settings.get("fusion.press_lookback_seconds",
+                                      86400))
+    else:
+        lookback = float(settings.get("fusion.time_window_seconds", 300)) * 4
+    since = _window_start(obs.occurred_at, lookback)
     for cand in repo.candidate_events_for_fusion(conn, obs.event_type, since):
         fuse, why = should_fuse(
             obs, cand,
@@ -63,14 +70,13 @@ def _correlate(
     return None, "no match"
 
 
-def _window_start(occurred_at: str, settings: Settings) -> str:
+def _window_start(occurred_at: str, window_s: float) -> str:
     from datetime import datetime, timedelta, timezone
-    window = float(settings.get("fusion.time_window_seconds", 300)) * 4
     try:
         dt = datetime.fromisoformat(occurred_at.replace("Z", "+00:00"))
     except (ValueError, AttributeError):
         dt = datetime.now(timezone.utc)
-    return (dt - timedelta(seconds=window)).isoformat().replace("+00:00", "Z")
+    return (dt - timedelta(seconds=window_s)).isoformat().replace("+00:00", "Z")
 
 
 def ingest_observation(
@@ -208,6 +214,8 @@ def ingest_observation(
             event.extra["series_id"] = norm.fields["series_id"]
         if norm.fields.get("storm_name"):
             event.extra["storm_name"] = norm.fields["storm_name"]
+        if norm.fields.get("headline"):
+            event.extra["headline"] = norm.fields["headline"]
 
         impact_score, level = score_impact(event.event_type, merged_snapshot,
                                            load_settings())

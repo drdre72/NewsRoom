@@ -8,10 +8,38 @@ recorded in event_sources.
 from __future__ import annotations
 
 import math
+import re
 from datetime import datetime, timezone
 from typing import Any
 
 from ..models.observation import NormalizedObservation
+
+_PRESS_TYPES = {"news_report", "crime_report"}
+# Outlet names + generic news verbs must not count toward sameness —
+# "Google News: X" vs "Google News: Y" would otherwise share tokens.
+_HEADLINE_STOP = {
+    "with", "from", "that", "this", "have", "has", "been", "were",
+    "they", "their", "after", "amid", "over", "says", "said", "what",
+    "when", "more", "than", "into", "some", "also", "will", "would",
+    "about", "google", "news", "reports", "report", "police",
+}
+
+
+def _headline_tokens(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9]+", (text or "").lower())
+            if len(w) > 3 and w not in _HEADLINE_STOP}
+
+
+def _headline_similarity(obs, candidate) -> float:
+    """Jaccard overlap between the raw incoming headline and the stored
+    event headline — catches the same story carried by many outlets."""
+    a = _headline_tokens(obs.fields.get("headline") or obs.title)
+    cand_head = (getattr(candidate, "extra", {}) or {}).get("headline") \
+        or getattr(candidate, "title", "")
+    b = _headline_tokens(str(cand_head))
+    if not a or not b:
+        return 0.0
+    return len(a & b) / len(a | b)
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -48,6 +76,15 @@ def should_fuse(
     """Deterministic fusion predicate with an explanation string."""
     if obs.event_type != candidate.event_type:
         return False, "different event_type"
+    # Press reports have no geo and publish over hours — geo/time fusion
+    # can never merge the same story across outlets. Headline-token
+    # overlap is the real identity signal: wire-copy duplicates fuse,
+    # genuinely different angles stay separate events.
+    if obs.event_type in _PRESS_TYPES:
+        sim = _headline_similarity(obs, candidate)
+        if sim >= 0.40:
+            return True, f"same-story headline ({sim:.2f} token overlap)"
+        return False, f"press: different story ({sim:.2f} overlap)"
     # Same-family sub-type discriminator: a Tornado Warning and a Flood Watch
     # for the same county are different incidents, however near in time/space.
     if obs.event_type == "weather_alert":

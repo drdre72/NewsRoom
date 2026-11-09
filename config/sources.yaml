@@ -267,3 +267,6 @@ sources:
 fusion:
   time_window_seconds: 300
   max_distance_km: 50.0
+  # Press reports carry no geo and publish over hours — same-story
+  # headline matching looks back a full day, not the sensor window.
+  press_lookback_seconds: 86400
