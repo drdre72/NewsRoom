@@ -99,35 +99,30 @@ class HlsPlayout:
             str(prog_pl),
         ]
 
-    def _rtmp_out_args(self) -> list[str]:
-        """Optional second muxer: the same encode tees to RTMP (§34).
-        Enabled by config + env only — the URL holds the stream key, so it
-        lives in the environment, never in config/git (§77)."""
-        import os
-        rtmp = self.settings.get("outputs.rtmp", {}) or {}
-        if not rtmp.get("enabled"):
-            return []
-        if not self.settings.get("publishing.automatic", False):
-            # §66: external transmission requires the publication gate to be
-            # explicitly unlocked, independent of the rtmp toggle.
-            log_event(log, 30, "rtmp configured but publishing.automatic "
-                      "is false; not transmitting")
-            return []
-        url = os.environ.get(rtmp.get("url_env", "NEWSROOM_RTMP_URL"), "")
-        if not url:
-            log_event(log, 30, "rtmp output enabled but env var unset",
-                      env=rtmp.get("url_env"))
-            return []
-        return ["-f", "flv", url]
-
     def _encode_args(self) -> list[str]:
         p = self.settings.get("playout", {}) or {}
-        return [
-            "-c:v", p.get("encoder", "h264_videotoolbox"),
-            "-b:v", p.get("video_bitrate", "6000k"),
-            "-c:a", p.get("audio", "aac"), "-ar", "48000",
-            "-b:a", p.get("audio_bitrate", "160k"), "-ac", "2",
-        ]
+        enc = p.get("encoder", "libx264")
+        args = ["-c:v", enc]
+        if "x264" in enc:
+            # True CBR + fixed GOP — what live ingest expects. VideoToolbox's
+            # rate control has no floor and undershoots to ~1.5 Mbps on the
+            # mostly-static newsroom picture. minrate alone does NOT fix
+            # this (x264 VBV only caps peaks) — nal-hrd=cbr inserts filler
+            # NALs to hold the mux rate at the target, which is the actual
+            # CBR contract YouTube's "not enough video" warning wants.
+            fps = int(p.get("fps", 30))
+            gop = fps * int(p.get("gop_seconds", 2))
+            br = p.get("video_bitrate", "6800k")
+            args += ["-preset", p.get("preset", "veryfast"),
+                     "-b:v", br, "-minrate", br, "-maxrate", br,
+                     "-bufsize", p.get("bufsize", "13600k"),
+                     "-g", str(gop), "-keyint_min", str(gop),
+                     "-sc_threshold", "0",
+                     "-x264-params", "nal-hrd=cbr"]
+        else:
+            args += ["-b:v", p.get("video_bitrate", "6000k")]
+        return args + ["-c:a", p.get("audio", "aac"), "-ar", "48000",
+                       "-b:a", p.get("audio_bitrate", "160k"), "-ac", "2"]
 
     def _geom(self) -> tuple[int, int, int]:
         p = self.settings.get("playout", {}) or {}
@@ -166,7 +161,7 @@ class HlsPlayout:
                        vmap: list[str] | None = None) -> int:
         prog_pl = self.dir / f"prog_{self.next_segment:05d}.m3u8"
         args = [*input_args, *(vmap or []), *self._encode_args(),
-                *self._hls_out_args(prog_pl), *self._rtmp_out_args()]
+                *self._hls_out_args(prog_pl)]
         cmd = [ffmpeg.ffmpeg_path(), "-y", "-hide_banner",
                "-loglevel", "error", *args]
         self._proc = subprocess.Popen(

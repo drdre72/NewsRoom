@@ -47,9 +47,15 @@ playout:
   width: 1920
   height: 1080
   fps: 30
-  encoder: h264_videotoolbox
+  # libx264 CBR — VideoToolbox rate control has no floor and undershoots
+  # to ~1.5 Mbps on the mostly-static newsroom picture, which ingest
+  # rejects as insufficient. Software encode at 1080p30/veryfast is cheap.
+  encoder: libx264
+  preset: veryfast
+  video_bitrate: 6800k         # YouTube's recommended floor for 1080p30
+  bufsize: 13600k
+  gop_seconds: 2               # keyframe every 2 s (ingest recommendation)
   audio: aac
-  video_bitrate: 6000k
   audio_bitrate: 160k
   # Local HLS preview (§34 dry-run output). Segments append to live.m3u8;
   # the preview server serves this directory over HTTP.
@@ -62,6 +68,10 @@ playout:
   port: 8788                   # preview HTTP port
 
 # Output muxers. HLS local preview is always on; RTMP is the YouTube path —
+# a persistent `python main.py rtmp-relay` agent follows live.m3u8 and
+# remuxes it to YouTube with one long-lived connection (per-program encodes
+# must NOT tee RTMP themselves: the connect/disconnect churn at each
+# program boundary makes ingest flag "not receiving enough video").
 # gated by `enabled` AND the env var holding the full push URL with stream
 # key (NEWSROOM_RTMP_URL=rtmp://a.rtmp.youtube.com/live2/<key>). The URL is
 # a secret: env-only, never in config/git (§77). publishing.automatic stays
@@ -70,5 +80,6 @@ outputs:
   hls:
     enabled: true
   rtmp:
-    enabled: false
+    enabled: true
     url_env: NEWSROOM_RTMP_URL
+    stall_seconds: 45          # pause the push when no fresh HLS segments

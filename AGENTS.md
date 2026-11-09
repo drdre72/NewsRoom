@@ -25,9 +25,11 @@ python main.py services install|status|uninstall   # launchd agents
 .venv/bin/python -m pytest tests/    # offline unit tests (no internet needed)
 ```
 
-Always-on: `services install` loads three LaunchAgents — core (poll+render
-drain), broadcast (Director→HLS), health (preview/status server). Watch
-the broadcast at http://localhost:8788/ before any YouTube output exists.
+Always-on: `services install` loads four LaunchAgents — core (poll+render
+drain), broadcast (Director→HLS), health (preview/status server), and
+rtmp (persistent YouTube push following live.m3u8 — never tee RTMP off
+the per-program encodes; the connect/disconnect churn trips ingest).
+Watch the broadcast at http://localhost:8788/ before any YouTube output exists.
 
 Extras: `tts` = mlx-audio + misaki (Kokoro MLX narration), `maps` = Playwright
 (+ `npm i` for maplibre-gl, vendored in package.json), `dev` = pytest.

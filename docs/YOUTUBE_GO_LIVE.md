@@ -2,10 +2,18 @@
 
 Two independent ways to put the newsroom on YouTube. They can coexist.
 
-## Path A — 24/7 live stream via RTMP (built, gated)
+## Path A — 24/7 live stream via RTMP relay (built, gated)
 
-The Broadcast Director already encodes H.264/AAC. Adding a YouTube push
-is a config change, not new code:
+The Broadcast Director already encodes H.264/AAC into a continuously
+updated `output/preview/live.m3u8`. A dedicated agent —
+`python main.py rtmp-relay` (`com.newsroom.rtmp`) — runs **one** persistent
+ffmpeg that follows that live playlist and remuxes it to YouTube with
+`-c copy` (no re-encode). Do NOT tee RTMP off the per-program encodes:
+each program's ffmpeg exits at its boundary, and the connect/disconnect
+churn makes YouTube ingest flag "not receiving enough video". The relay
+keeps a single TCP session across program joins and Director restarts,
+and pauses itself when the HLS window goes stale instead of re-airing
+the tail.
 
 1. YouTube Studio → Go Live → copy the **stream key** for a persistent
    ("reuseable") stream. New channels must wait 24 h after enabling live.
@@ -16,7 +24,7 @@ is a config change, not new code:
    ```
 3. Flip `outputs.rtmp.enabled: true` in `config/broadcast.yaml` and
    `publishing.automatic: true` in `config/settings.yaml`.
-4. Restart `com.newsroom.broadcast` only — core/preview untouched.
+4. `python main.py services install` — loads `com.newsroom.rtmp` too.
 
 What airs: whatever the Director airs — stories, replays, standby slates.
 The stream is continuous; YouTube sees one long broadcast.

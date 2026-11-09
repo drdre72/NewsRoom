@@ -152,6 +152,14 @@ def cmd_broadcast(args) -> int:
     return 0
 
 
+def cmd_rtmp_relay(args) -> int:
+    """Persistent YouTube RTMP push: one ffmpeg follows live.m3u8 and
+    remuxes it out — the connection survives program boundaries (§34)."""
+    from .broadcast.rtmp_relay import run
+    _, settings = _conn_and_settings(args)
+    return run(settings)
+
+
 def cmd_preview(args) -> int:
     """Serve the local broadcast preview over HTTP (§34 dry-run surface)."""
     from .broadcast.preview import serve
@@ -259,6 +267,7 @@ def main(argv: list[str] | None = None) -> int:
     p_st.add_argument("event_id")
     sub.add_parser("status")
     sub.add_parser("broadcast")
+    sub.add_parser("rtmp-relay")
     p_pv = sub.add_parser("preview")
     p_pv.add_argument("--port", type=int, default=None)
     p_hl = sub.add_parser("health")
@@ -293,6 +302,7 @@ def main(argv: list[str] | None = None) -> int:
         "run": cmd_run, "render": cmd_render,
         "render-long": cmd_render_longform, "events": cmd_events,
         "story": cmd_story, "broadcast": cmd_broadcast,
+        "rtmp-relay": cmd_rtmp_relay,
         "preview": cmd_preview, "health": cmd_health,
         "services": cmd_services, "retention": cmd_retention,
         "dehydrate": cmd_dehydrate, "restore": cmd_restore,

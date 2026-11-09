@@ -17,7 +17,8 @@ from pathlib import Path
 from ..paths import logs_dir, project_root
 
 LAUNCHD_DIR = Path(__file__).parent / "launchd"
-LABELS = ("com.newsroom.core", "com.newsroom.broadcast", "com.newsroom.health")
+LABELS = ("com.newsroom.core", "com.newsroom.broadcast",
+          "com.newsroom.health", "com.newsroom.rtmp")
 
 
 def _substitutions() -> dict[str, str]:

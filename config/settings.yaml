@@ -45,7 +45,8 @@ workers:
   video_render: 1
 
 publishing:
-  automatic: false   # §66 — stays off until factual safety is proven
+  automatic: true    # §66 — operator-approved go-live 2026-11-09; the
+                     # publication gate still gates every render first
 
 llm:
   provider: ollama
