@@ -33,34 +33,58 @@ Caveats: you can't title/tag individual segments, no chapters mid-stream,
 YouTube may throttle/re-encode; VOD archives accumulate automatically
 (up to the archive limit) but aren't curated.
 
-## Path B — Upload API for Shorts + long-form (needs building)
+## Path B — Upload API for Shorts + long-form (built, gated)
 
 Rendered MP4s + manifests are already on disk (`output/shorts`,
 `output/longform`, `output/manifests` — manifests carry titles,
-`youtube_chapters`, fact IDs, and gate verdicts).
+`youtube_chapters`, fact IDs, and gate verdicts). The publish module
+is built (`src/newsroom/publish/youtube.py`): OAuth device flow,
+resumable upload, title/description/chapters from manifest, and a
+"Best of the Day" playlist — all via raw HTTP, no Google client library.
 
-Build required (~1 session):
-- Google Cloud project → enable YouTube Data API v3 → OAuth consent
-  screen (external, testing) → client_secret.json (stays out of git).
-- One-time OAuth device/console flow → refresh token in `.env`
-  (`NEWSROOM_YT_REFRESH_TOKEN`); access tokens minted per upload.
-- `src/newsroom/publish/youtube.py`: resumable upload, title/description
-  from manifest, `#Shorts` tagging for verticals, chapters for long-form.
-- Upload policy in config: min impact level, per-day cap.
-  **As of June 2026, `videos.insert` has its own quota bucket: 100
-  uploads/day at 1 unit each** (the old ~1,600-unit cost that limited
-  us to ~6/day was retired). The 10,000-unit shared pool covers
-  thumbnails, playlist adds, and metadata updates for ~100 fully
-  processed uploads/day. No scarcity-driven curation needed — upload
-  every gate-passed Short; use a "Best of the Day" playlist to drive
-  engagement back to live.
-- Gate: only `publication_gate.verdict == "pass"` assets upload;
-  `publishing.automatic` still required as the master switch.
+### Setup (one-time)
 
-Caveats: OAuth consent screen in "testing" mode requires re-auth weekly
-unless the app is verified. A daily "most engaging" playlist needs a
-selection heuristic (highest impact + most airings) — a config-driven
-rank, not an LLM pick.
+1. Google Cloud Console → enable YouTube Data API v3 → create OAuth
+   client ID (Desktop app) → put in `.env`:
+   ```
+   NEWSROOM_YT_CLIENT_ID=xxx.apps.googleusercontent.com
+   NEWSROOM_YT_CLIENT_SECRET=xxx
+   ```
+2. Run `python main.py youtube auth` → visit the URL, enter the code,
+   copy the refresh token to `.env`:
+   ```
+   NEWSROOM_YT_REFRESH_TOKEN=xxx
+   ```
+
+### Usage
+
+```bash
+python main.py youtube upload --dry-run    # see what would upload
+python main.py youtube upload              # upload all gate-passed
+python main.py youtube playlist --dry-run  # see best-of-day selection
+python main.py youtube playlist            # create the playlist
+```
+
+### What uploads
+
+Only assets where `publication_gate.verdict == "pass"` in the manifest.
+Shorts (vertical 1080x1920) get `#Shorts` in the description;
+long-form gets YouTube chapters from the manifest. Titles strip the
+outlet prefix; descriptions carry source attribution + event ID +
+revision + chapters + a link back to the live channel.
+
+### Quota (June 2026)
+
+`videos.insert` has its own bucket: 100 uploads/day at 1 unit each,
+independent of the 10,000-unit shared pool. No scarcity-driven curation
+needed — upload everything that passes the gate.
+
+### Best of the Day playlist
+
+`select_best_of_day` ranks stories by `impact_score × (1 + air_count/10)`
+over the last 24h, excluding replays. A FLASH that aired once beats a
+NORMAL that aired 50 times. The playlist drives engagement back to
+the live broadcast.
 
 ## Recommendation
 

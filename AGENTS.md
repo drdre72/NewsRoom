@@ -83,6 +83,7 @@ src/newsroom/
   sim/             fixtures + scenario runner
   broadcast/       director, program scheduler, frame (16:9 chrome),
                    HLS playout (+ gated RTMP out), slate, preview
+  publish/         YouTube upload API (OAuth, resumable upload, playlists)
   macos/           launchd plist templates + install/uninstall
   service.py       core daemon loop (poll + job drain, signal-aware)
 tests/             pytest, offline-safe

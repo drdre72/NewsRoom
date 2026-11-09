@@ -160,6 +160,87 @@ def cmd_rtmp_relay(args) -> int:
     return run(settings)
 
 
+def cmd_youtube(args) -> int:
+    """YouTube upload API: auth, upload Shorts/long-form, best-of-day playlist."""
+    from .publish.youtube import (
+        device_auth_url, exchange_device_code, refresh_access_token,
+        upload_video, create_playlist, add_to_playlist,
+        select_best_of_day, upload_eligible,
+    )
+    from .storage import repositories as repo
+    conn, settings = _conn_and_settings(args)
+
+    if args.action == "auth":
+        info = device_auth_url()
+        print(f"Visit: {info['user_url']}")
+        print(f"Enter code: {info['user_code']}")
+        print("Waiting for authorization...")
+        token = exchange_device_code(
+            info["device_code"],
+            interval=int(info.get("interval", "5")),
+            timeout=int(info.get("expires_in", "300")))
+        if token:
+            print(f"Authorized! Add to .env:")
+            print(f"  NEWSROOM_YT_REFRESH_TOKEN={token}")
+            return 0
+        print("Authorization timed out or failed.")
+        return 1
+
+    if args.action == "upload":
+        eligible = upload_eligible(conn, settings,
+                                   max_per_day=args.max_per_day)
+        if not eligible:
+            print("No eligible videos to upload.")
+            return 0
+        print(f"Found {len(eligible)} eligible videos.")
+        if args.dry_run:
+            for e in eligible:
+                ev = repo.get_event(conn, e["event_id"])
+                print(f"  [dry-run] {e['event_id']} r{e['revision']} "
+                      f"-> '{ev.title[:60] if ev else ''}'")
+            return 0
+        token = refresh_access_token()
+        uploaded = 0
+        for e in eligible:
+            ev = repo.get_event(conn, e["event_id"])
+            result = upload_video(e["manifest"], ev, token,
+                                 dry_run=False, privacy=args.privacy)
+            if result.get("ok"):
+                uploaded += 1
+                print(f"  uploaded: {result.get('video_id', '?')} "
+                      f"'{result.get('title', '')[:60]}'")
+            else:
+                print(f"  failed: {e['event_id']} - {result.get('error','')}")
+        print(f"Uploaded {uploaded}/{len(eligible)} videos.")
+        return 0 if uploaded == len(eligible) else 1
+
+    if args.action == "playlist":
+        best = select_best_of_day(conn, settings, top_n=args.top_n)
+        if not best:
+            print("No stories aired in the last 24h.")
+            return 0
+        print(f"Best of the Day ({len(best)} stories):")
+        for i, s in enumerate(best, 1):
+            print(f"  {i}. [{s['impact_level']}] {s['title'][:60]} "
+                  f"(aired {s['air_count']}x, score {s['impact_score']:.2f})")
+        if args.dry_run:
+            return 0
+        token = refresh_access_token()
+        from datetime import datetime, timezone
+        title = f"Best of the Day — {datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
+        desc = "Top stories from the autonomous newsroom's live broadcast."
+        pl = create_playlist(title, desc, token, dry_run=args.dry_run)
+        if not pl.get("ok"):
+            print(f"Playlist creation failed: {pl.get('error','')}")
+            return 1
+        if pl.get("dry_run"):
+            return 0
+        print(f"Playlist: {pl.get('playlist_id','?')}")
+        return 0
+
+    return 1
+
+
 def cmd_preview(args) -> int:
     """Serve the local broadcast preview over HTTP (§34 dry-run surface)."""
     from .broadcast.preview import serve
@@ -294,6 +375,16 @@ def main(argv: list[str] | None = None) -> int:
     p_ar.add_argument("--execute", action="store_true",
                       help="perform copies (default: report only)")
     p_ar.add_argument("--max-gb", type=float, default=None)
+    p_yt = sub.add_parser("youtube")
+    p_yt.add_argument("action", choices=("auth", "upload", "playlist"))
+    p_yt.add_argument("--dry-run", action="store_true",
+                      help="show what would upload without sending")
+    p_yt.add_argument("--max-per-day", type=int, default=100,
+                      help="daily upload cap (quota is 100)")
+    p_yt.add_argument("--privacy", default="public",
+                      choices=("public", "unlisted", "private"))
+    p_yt.add_argument("--top-n", type=int, default=10,
+                      help="playlist size for 'playlist' action")
 
     args = parser.parse_args(argv)
     configure_logging()
@@ -307,6 +398,7 @@ def main(argv: list[str] | None = None) -> int:
         "services": cmd_services, "retention": cmd_retention,
         "dehydrate": cmd_dehydrate, "restore": cmd_restore,
         "archive": cmd_archive,
+        "youtube": cmd_youtube,
     }[args.command](args)
 
 

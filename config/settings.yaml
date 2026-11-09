@@ -47,6 +47,10 @@ workers:
 publishing:
   automatic: true    # §66 — operator-approved go-live 2026-11-09; the
                      # publication gate still gates every render first
+  youtube:
+    max_per_day: 100   # quota bucket is 100 uploads/day (June 2026)
+    privacy: public    # public | unlisted | private
+    best_of_day_top_n: 10  # daily playlist size
 
 llm:
   provider: ollama
