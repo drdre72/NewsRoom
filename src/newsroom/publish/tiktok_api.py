@@ -16,7 +16,6 @@ upload is a duplicate inbox draft, never an unwanted public post.
 """
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import os
@@ -59,15 +58,18 @@ def _client_creds() -> tuple[str, str]:
 
 
 def authorization_url(client_key: str, redirect_uri: str, state: str,
-                      verifier: str) -> str:
-    challenge = base64.urlsafe_b64encode(
-        hashlib.sha256(verifier.encode("ascii")).digest()
-    ).rstrip(b"=").decode("ascii")
-    return _AUTH_URL + "?" + urllib.parse.urlencode({
-        "client_key": client_key, "redirect_uri": redirect_uri,
-        "response_type": "code", "scope": _SCOPE, "state": state,
-        "code_challenge": challenge, "code_challenge_method": "S256",
-    })
+                      verifier: str | None) -> str:
+    params = {"client_key": client_key, "redirect_uri": redirect_uri,
+              "response_type": "code", "scope": _SCOPE, "state": state}
+    if verifier is not None:
+        # TikTok quirk: their "S256" is HEX(SHA256(verifier)), not the
+        # RFC 7636 base64url form — a base64url challenge is rejected at
+        # the token exchange with "Code verifier or code challenge is
+        # invalid".
+        params["code_challenge"] = hashlib.sha256(
+            verifier.encode("ascii")).hexdigest()
+        params["code_challenge_method"] = "S256"
+    return _AUTH_URL + "?" + urllib.parse.urlencode(params)
 
 
 def _token_request(params: dict) -> dict:
@@ -86,25 +88,35 @@ def _token_request(params: dict) -> dict:
             f"TikTok token endpoint rejected ({exc.code}): "
             f"{redact_error(exc)}") from None
     if body.get("error"):
-        raise RuntimeError(f"TikTok token error: {body['error']}")
+        detail = body.get("error_description") or body.get("message") or ""
+        log_id = body.get("log_id") or ""
+        raise RuntimeError(
+            f"TikTok token error: {body['error']}"
+            + (f" — {detail}" if detail else "")
+            + (f" (log_id {log_id})" if log_id else ""))
     return body
 
 
-def exchange_auth_code(code: str, redirect_uri: str, verifier: str) -> dict:
-    body = _token_request({
-        "code": code, "grant_type": "authorization_code",
-        "redirect_uri": redirect_uri, "code_verifier": verifier})
+def exchange_auth_code(code: str, redirect_uri: str,
+                       verifier: str | None) -> dict:
+    params = {"code": code, "grant_type": "authorization_code",
+              "redirect_uri": redirect_uri}
+    if verifier is not None:
+        params["code_verifier"] = verifier
+    body = _token_request(params)
     if not body.get("refresh_token"):
         raise RuntimeError("TikTok returned no refresh token; retry auth")
     return {"refresh_token": body["refresh_token"],
             "open_id": body.get("open_id", "")}
 
 
-def authorize_desktop(timeout: int = 300, announce=print) -> dict:
-    """Fixed-port loopback auth — TikTok requires an exact-match
-    redirect URI, so the port is pinned to the registered value."""
+class _ReusableHTTPServer(HTTPServer):
+    allow_reuse_address = True   # second attempt must rebind 8789
+
+
+def _auth_round(use_pkce: bool, timeout: int, announce) -> dict:
     key, _ = _client_creds()
-    verifier = secrets.token_urlsafe(64)
+    verifier = secrets.token_urlsafe(64) if use_pkce else None
     state = secrets.token_urlsafe(32)
     result: dict[str, str] = {}
     redirect_uri = f"http://127.0.0.1:{_PORT}/callback"
@@ -136,7 +148,7 @@ def authorize_desktop(timeout: int = 300, announce=print) -> dict:
         def log_message(self, *_args):
             pass  # never log the authorization code or query string
 
-    with HTTPServer(("127.0.0.1", _PORT), Callback) as server:
+    with _ReusableHTTPServer(("127.0.0.1", _PORT), Callback) as server:
         announce("Open this URL on this Mac to authorize TikTok:")
         announce(f"http://127.0.0.1:{_PORT}/start")
         deadline = time.monotonic() + timeout
@@ -151,6 +163,25 @@ def authorize_desktop(timeout: int = 300, announce=print) -> dict:
     if not result.get("code"):
         raise RuntimeError("TikTok authorization returned no code")
     return exchange_auth_code(result["code"], redirect_uri, verifier)
+
+
+def authorize_desktop(timeout: int = 300, announce=print) -> dict:
+    """Fixed-port loopback auth — TikTok requires an exact-match
+    redirect URI, so the port is pinned to the registered value.
+
+    PKCE is sent first; some app configs (notably sandbox keys) ignore
+    the challenge at authorize time and then reject the verifier at the
+    token exchange. Falling back to a secret-only exchange is safe here
+    — client_secret already authenticates it on loopback."""
+    try:
+        return _auth_round(True, timeout, announce)
+    except RuntimeError as exc:
+        msg = str(exc).lower()
+        if "verifier" not in msg and "challenge" not in msg:
+            raise
+        announce("TikTok rejected the PKCE verifier — retrying without "
+                 "PKCE (client_secret still authenticates the exchange).")
+        return _auth_round(False, timeout, announce)
 
 
 def save_credentials(tokens: dict, env_file: Path) -> None:
@@ -211,8 +242,10 @@ def _api_post(path: str, payload: dict, token: str) -> dict:
 
 def _upload_url_ok(url: str) -> bool:
     p = urllib.parse.urlsplit(url)
+    host = p.hostname or ""
     return (p.scheme == "https"
-            and (p.hostname or "").endswith(".tiktokapis.com")
+            and (host.endswith(".tiktokapis.com")
+                 or host.endswith(".tiktokapis.us"))
             and p.port in (None, 443) and not p.username
             and not p.password and not p.fragment)
 
@@ -223,9 +256,11 @@ def inbox_init(size: int, token: str) -> dict:
     the remainder and may reach 128 MB."""
     chunk_size = _CHUNK
     count = max(1, size // chunk_size)
+    # Single-chunk uploads must declare chunk_size == video_size —
+    # TikTok validates the pair ("The chunk size is invalid").
     data = _api_post("/post/publish/inbox/video/init/", {
         "source_info": {"source": "FILE_UPLOAD", "video_size": size,
-                        "chunk_size": chunk_size,
+                        "chunk_size": size if count == 1 else chunk_size,
                         "total_chunk_count": count}}, token)
     pid, url = data.get("publish_id", ""), data.get("upload_url", "")
     if not pid or not _upload_url_ok(url):
@@ -299,7 +334,7 @@ def push_to_inbox(manifest: dict, token: str, *,
                 st = fetch_status(state["publish_id"], token)
                 if st["status"] == "SEND_TO_USER_INBOX":
                     return {"ok": True, "publish_id": state["publish_id"],
-                            "resumed": True}
+                            "status": st["status"], "resumed": True}
                 # Unknown or failed — a duplicate draft is the worst case;
                 # never a public post. Fall through to a fresh session.
             init = inbox_init(size, token)

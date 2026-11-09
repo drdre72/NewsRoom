@@ -122,7 +122,7 @@ class TestInboxApi:
         si = seen["body"]["source_info"]
         assert si["source"] == "FILE_UPLOAD"
         assert si["video_size"] == 30_000_000
-        assert si["chunk_size"] == api._CHUNK
+        assert si["chunk_size"] == 30_000_000   # single chunk = video size
         assert si["total_chunk_count"] == 1
         assert out["publish_id"] == "v_inbox_1"
 
@@ -137,6 +137,8 @@ class TestInboxApi:
     def test_upload_url_allowlist(self):
         assert _upload_url_ok(
             "https://open-upload.tiktokapis.com/video/?u=1")
+        assert _upload_url_ok(
+            "https://open-upload.tiktokapis.us/upload?u=1")
         assert _upload_url_ok("https://upload.us.tiktokapis.com/v/?u=1")
         assert not _upload_url_ok("https://tiktokapis.com.evil.com/v")
         assert not _upload_url_ok("https://nottiktokapis.com/v")
