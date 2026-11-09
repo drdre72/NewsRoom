@@ -144,6 +144,19 @@ def cmd_tiktok(args) -> int:
     from .publish import tiktok as tt
     conn, settings = _conn_and_settings(args)
 
+    if args.action == "auth":
+        from .publish import tiktok_api as api
+        from pathlib import Path
+        env_file = Path(__file__).resolve().parents[2] / ".env"
+        try:
+            tokens = api.authorize_desktop()
+            api.save_credentials(tokens, env_file)
+        except (RuntimeError, TimeoutError, OSError) as exc:
+            print(f"Authorization failed: {exc}")
+            return 1
+        print("Authorized; refresh token saved privately to .env.")
+        return 0
+
     if args.action == "list":
         for c in tt.list_candidates(conn, settings, limit=args.limit):
             print(f"{c['event_id']:<34} r{c['revision']:<3} "
@@ -180,6 +193,72 @@ def cmd_tiktok(args) -> int:
             return 1
         print(f"Recorded post on {result['assets']} asset(s): "
               f"{result['url']}")
+        return 0
+
+    if args.action == "push":
+        from .publish import tiktok_api as api
+        from .storage import repositories as repo
+        if not args.event_id:
+            print("usage: tiktok push <event_id>  — sends the video to "
+                  "your TikTok inbox as a draft")
+            return 1
+        if not settings.get("publishing.tiktok.push_enabled", False):
+            print("TikTok inbox push is disabled "
+                  "(publishing.tiktok.push_enabled).")
+            return 1
+        cands = tt.draft_candidates(conn, settings,
+                                    event_id=args.event_id,
+                                    enforce_daily_cap=False)
+        if not cands:
+            print("No eligible tiktok render for that event — check that "
+                  f"`python main.py render-tiktok {args.event_id}` ran "
+                  "clean, the gate passed, and it isn't already pushed.")
+            return 1
+        cand = cands[0]
+        try:
+            token, new_refresh = api.refresh_access_token()
+            if new_refresh:
+                from pathlib import Path
+                api.save_credentials(
+                    {"refresh_token": new_refresh},
+                    Path(__file__).resolve().parents[2] / ".env")
+        except RuntimeError as exc:
+            print(f"Auth failed: {exc}")
+            return 1
+        result = api.push_to_inbox(cand["manifest"], token,
+                                   asset_id=cand["asset_id"])
+        if result.get("ok"):
+            repo.patch_asset_meta(conn, cand["asset_id"], {
+                "tiktok_publish_id": result["publish_id"],
+                "tiktok_inbox_at": repo.utcnow(),
+                "tiktok_inbox_status": result.get("status", "")})
+            print(f"Pushed to TikTok inbox: publish_id "
+                  f"{result['publish_id']} "
+                  f"(status {result.get('status', '?')})")
+            print("Finish posting in the TikTok app — check inbox "
+                  "notifications, then "
+                  f"`tiktok posted {args.event_id} <url>` once live.")
+            return 0
+        print(f"Push failed: {result.get('error')}")
+        return 1
+
+    if args.action == "status":
+        from .publish import tiktok_api as api
+        if not args.event_id:
+            print("usage: tiktok status <publish_id>")
+            return 1
+        try:
+            token, _ = api.refresh_access_token()
+        except RuntimeError as exc:
+            print(f"Auth failed: {exc}")
+            return 1
+        try:
+            st = api.fetch_status(args.event_id, token)
+        except RuntimeError as exc:
+            print(f"Status check failed: {exc}")
+            return 1
+        print(f"{args.event_id}: {st['status'] or 'unknown'}"
+              + (f" — {st['fail_reason']}" if st.get("fail_reason") else ""))
         return 0
 
     return 1
@@ -424,7 +503,8 @@ def main(argv: list[str] | None = None) -> int:
     p_rtk = sub.add_parser("render-tiktok")
     p_rtk.add_argument("event_id")
     p_tk = sub.add_parser("tiktok")
-    p_tk.add_argument("action", choices=("list", "draft", "posted"))
+    p_tk.add_argument("action", choices=("auth", "list", "draft", "posted",
+                                       "push", "status"))
     p_tk.add_argument("event_id", nargs="?", default=None)
     p_tk.add_argument("url", nargs="?", default=None)
     p_tk.add_argument("--limit", type=int, default=20)

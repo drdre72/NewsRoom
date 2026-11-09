@@ -268,6 +268,7 @@ def draft_candidates(conn: sqlite3.Connection, settings: Settings,
              AND COALESCE(json_extract(a.meta_json, '$.archived'), 0)=0
              AND COALESCE(json_extract(a.meta_json, '$.air_blocked'), 0)=0
              AND COALESCE(json_extract(a.meta_json, '$.tiktok_url'), '')=''
+             AND COALESCE(json_extract(a.meta_json, '$.tiktok_inbox_at'), '')=''
              AND COALESCE(json_extract(a.meta_json, '$.tiktok_draft_at'), '')=''
            ORDER BY e.impact_score DESC, a.created_at DESC"""
     ).fetchall()
@@ -322,8 +323,10 @@ def list_candidates(conn: sqlite3.Connection, settings: Settings,
                  AND json_extract(meta_json, '$.format')='tiktok'""",
             (eid,)).fetchall()]
         posted = any(m.get("tiktok_url") for m in metas)
+        inboxed = any(m.get("tiktok_inbox_at") for m in metas)
         drafted = any(m.get("tiktok_draft_at") for m in metas)
-        status = ("posted" if posted else "drafted" if drafted
+        status = ("posted" if posted else "inbox" if inboxed
+                  else "drafted" if drafted
                   else "rendered" if metas else "new")
         out.append({
             "event_id": eid, "title": r["title"], "type": r["event_type"],

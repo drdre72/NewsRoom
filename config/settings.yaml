@@ -60,6 +60,10 @@ publishing:
     handle: "@justsystemnews"
     drafts_enabled: true
     max_drafts_per_day: 3    # FYP rewards consistency, not volume
+    # Upload-to-drafts API (video.upload scope): sends to YOUR OWN TikTok
+    # inbox as a draft — a human still taps publish in-app, so this is on
+    # by default. Nothing here can post publicly.
+    push_enabled: true
 
 llm:
   provider: ollama

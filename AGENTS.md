@@ -15,6 +15,7 @@ python main.py run --once    # poll enabled sources once (live network)
 python main.py render <event_id>     # render a Short for an event
 python main.py render-tiktok <id>    # vertical explainer for the TikTok desk
 python main.py tiktok list|draft|posted   # manual post desk (@justsystemnews)
+python main.py tiktok auth|push|status    # upload-to-drafts API (video.upload)
 python main.py events        # list canonical events
 python main.py story <id>    # revision + fact-ledger history for an event
 python main.py broadcast     # Broadcast Director: rundown → HLS live.m3u8
