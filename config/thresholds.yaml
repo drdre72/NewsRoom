@@ -176,6 +176,16 @@ impact:
                           "jerusalem post": 0.5, "times of india": 0.45,
                           "o'keefe media group": 0.3}}
 
+  # Crime desk — phrase-scored on crime-filtered queries, so the floor
+  # already means "crime headline." Federal-grade breaking phrases
+  # (manhunt, mass shooting, amber alert) reach BREAKING in the rundown;
+  # the interrupt gate stays out of reach at press confidence — that
+  # needs corroboration, same as every press path.
+  crime_report:
+    severity:   {weight: 0.55, min: 0, max: 1}        # reads severity_norm
+    category:   {weight: 0.35, default: 0.45,
+                 values: {"google news": 0.55}}
+
   levels:            # score -> level (first match wins, top-down)
     FLASH: 0.85
     BREAKING: 0.60
@@ -205,6 +215,9 @@ confidence:
     jpost: 0.65        # regional press with editorial line
     aljazeera: 0.70    # international broadcaster
     omg: 0.40          # partisan sting outlet — attributed only
+    gnews_crime: 0.70  # index transport; underlying outlets carry claims —
+                     # at the 0.70 air gate, never near the 0.90 interrupt gate
+    gnews_federal: 0.70
     default: 0.50
   reviewed_bonus: 0.05        # source marked event "reviewed"
   corroboration_bonus: 0.05   # per extra corroborating source, max +0.10

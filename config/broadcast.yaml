@@ -2,6 +2,7 @@
 
 rundown:
   segments:
+    - {id: crime,            title: "Crime Desk",         priority: 90, max_air_every_min: 15}
     - {id: headlines,        title: "Top Stories",        priority: 60, max_air_every_min: 30}
     - {id: world_weather,    title: "Global Weather",     priority: 30, max_air_every_min: 45}
     - {id: earthquakes,      title: "Earthquake Activity", priority: 50, max_air_every_min: 20}

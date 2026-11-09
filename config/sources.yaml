@@ -233,6 +233,36 @@ sources:
       posts: https://okeefemediagroup.com/wp-json/wp/v2/posts?per_page=15
     poll_feed: posts
 
+  # Crime desk (§53) — Google News RSS queries aggregate local + national
+  # crime coverage within minutes of publication. Federal press sites
+  # (DOJ/FBI/DEA/ATF/USMS) are WAF-blocked to programmatic fetches, so
+  # aggregation is the honest path. Emits `crime_report` events: headline
+  # phrases score into BREAKING band; press-level confidence keeps them
+  # out of the interrupt gate until corroborated.
+  gnews_crime:
+    kind: crime_rss
+    authority: 0.55      # aggregation layer, not a primary source
+    enabled: true
+    format: rss
+    outlet: "Google News"
+    poll_every_seconds: 600
+    max_items: 25
+    feeds:
+      crime: "https://news.google.com/rss/search?q=%22active+shooter%22+OR+%22mass+shooting%22+OR+manhunt+OR+hostage+OR+%22serial+killer%22+OR+%22school+shooting%22+OR+homicide&hl=en-US&gl=US&ceid=US:en"
+    poll_feed: crime
+
+  gnews_federal:
+    kind: crime_rss
+    authority: 0.55
+    enabled: true
+    format: rss
+    outlet: "Google News"
+    poll_every_seconds: 600
+    max_items: 25
+    feeds:
+      federal: "https://news.google.com/rss/search?q=FBI+arrest+OR+%22federal+charges%22+OR+%22DOJ%22+indictment+OR+%22human+trafficking%22+OR+%22most+wanted%22&hl=en-US&gl=US&ceid=US:en"
+    poll_feed: federal
+
 # Cross-source event fusion (§16)
 fusion:
   time_window_seconds: 300

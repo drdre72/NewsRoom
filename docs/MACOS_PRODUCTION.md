@@ -269,6 +269,13 @@ AND `publishing.automatic: true`. All three are off by default (§66, §77).
   with attribution, never asserted as verified. Keyword scoring caps below
   BREAKING so a headline alone can't interrupt; corroboration with
   sensor/official sources is what escalates. Haaretz has no public feed.
+- **Crime desk** (`crime_report`) — major-crime coverage via Google News
+  RSS queries (violent crime + federal enforcement); DOJ/FBI/DEA/ATF/USMS
+  press sites are WAF-blocked to programmatic fetch, so aggregation is the
+  path. Phrase-scored (multi-word: "mass shooting", "amber alert"): top
+  phrases reach BREAKING in the rundown; press confidence 0.70 keeps
+  crime out of the interrupt gate. Replays are severity-weighted LRU —
+  high-impact stories rotate ~2x faster without starving the pool.
 
 The poller remembers successful fetches in process (including empty or
 unchanged feeds) so source intervals remain enforced without new evidence;

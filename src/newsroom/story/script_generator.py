@@ -210,6 +210,10 @@ _BACKGROUND_BY_TYPE = {
         "Press reports are attributed coverage: the outlet states the "
         "claim, and the newsroom relays it with attribution rather than "
         "asserting it as independently verified fact."),
+    "crime_report": (
+        "Crime Desk coverage is aggregated from press reports and "
+        "official statements. Items are attributed to their sources; "
+        "federal confirmations outrank aggregation."),
 }
 _BACKGROUND_GENERIC = (
     "This event is being monitored by the autonomous newsroom. "
@@ -388,7 +392,7 @@ def _script_from_template(
         return _fema_template(ctx, settings)
     if ctx.event_type == "cyber_advisory":
         return _cisa_template(ctx, settings)
-    if ctx.event_type == "news_report":
+    if ctx.event_type in ("news_report", "crime_report"):
         return _news_template(ctx, settings)
     return _eonet_template(ctx, settings)
 

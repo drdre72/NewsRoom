@@ -58,14 +58,13 @@ def _clean(text: str | None) -> str:
         "&quot;", '"').replace("&#8220;", '"').replace("&#8221;", '"').strip()
 
 
-def _snorm(title: str) -> float:
-    words = set(re.findall(r"[a-z]+", title.lower()))
-    return max(0.25, *(_KEYWORD_BOOST.get(w, 0.0) for w in words))
-
-
 class NewsRssAdapter(SourceAdapter):
     kind = "news_rss"
     event_type = "news_report"
+
+    def _snorm(self, title: str) -> float:
+        words = set(re.findall(r"[a-z]+", title.lower()))
+        return max(0.25, *(_KEYWORD_BOOST.get(w, 0.0) for w in words))
 
     def fetch(self, timeout: int = 20, user_agent: str = "newsroom/0.1") -> FetchResult:
         from ...storage.repositories import utcnow
@@ -147,7 +146,7 @@ class NewsRssAdapter(SourceAdapter):
         outlet = self.config.get("outlet", self.name)
         key = hashlib.sha1(
             (item.get("guid") or link or title).encode()).hexdigest()[:16]
-        snorm = _snorm(title)
+        snorm = self._snorm(title)
         fields = {
             "outlet": outlet,
             "headline": title,
@@ -159,7 +158,7 @@ class NewsRssAdapter(SourceAdapter):
         }
         return NormalizedObservation(
             source=self.name, source_event_id=f"{self.name}:{key}",
-            event_type="news_report",
+            event_type=self.event_type,
             occurred_at=item.get("published") or "",
             source_updated_at=item.get("published"),
             latitude=None, longitude=None,

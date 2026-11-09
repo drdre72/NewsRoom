@@ -17,6 +17,7 @@ from ..storage import repositories as repo
 # have no content source yet and are skipped (headlines has no list =
 # any event type qualifies).
 SEGMENT_TYPES = {
+    "crime": ["crime_report"],
     "earthquakes": ["earthquake"],
     "world_weather": ["weather_alert"],
     "international": ["wildfire", "volcano", "severe_storm", "flood",
@@ -145,11 +146,17 @@ def pick_replay(conn: sqlite3.Connection, settings: Settings) -> Program | None:
         return None
     min_conf = float(settings.get("auto_render.min_confidence", 0.70))
     rows = conn.execute(
-        "SELECT a.event_id, MAX(a.started_at) AS last_air FROM air_log a"
+        "SELECT a.event_id, MAX(a.started_at) AS last_air,"
+        " (julianday('now') - julianday(MAX(a.started_at))) * 24.0 AS stale_h"
+        " FROM air_log a"
         " JOIN events e ON e.event_id = a.event_id"
         " AND e.current_revision = a.revision"
         " GROUP BY a.event_id ORDER BY last_air ASC",
     ).fetchall()
+    # Severity-weighted LRU: a story's impact multiplies its staleness, so
+    # BREAKING crime rotates back roughly twice as fast as NORMAL filler
+    # while the pool still round-robins within a level.
+    candidates = []
     for row in rows:
         ev = repo.get_event(conn, row["event_id"])
         if not ev or ev.confidence_score < min_conf:
@@ -158,7 +165,11 @@ def pick_replay(conn: sqlite3.Connection, settings: Settings) -> Program | None:
                                         ev.current_revision)
         if not asset:
             continue
-        return Program("replay", "replay", ev.event_id, ev.current_revision,
-                       asset["path"], ev.title or ev.event_id,
-                       ev.impact_level)
-    return None
+        weight = 1.0 + 0.75 * _LEVEL_RANK.get(ev.impact_level, 0)
+        candidates.append((-(row["stale_h"] or 0.0) * weight, ev, asset))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda c: c[0])
+    _, ev, asset = candidates[0]
+    return Program("replay", "replay", ev.event_id, ev.current_revision,
+                   asset["path"], ev.title or ev.event_id, ev.impact_level)
