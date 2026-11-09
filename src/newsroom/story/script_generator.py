@@ -19,6 +19,10 @@ from .context_builder import FactContext
 
 log = get_logger("script")
 
+# A down LLM server WARNs once per process; repeat outages stay visible in
+# the JSON log at INFO without flooding the launchd stderr mirror.
+_llm_down_warned = False
+
 SYSTEM_PROMPT = """You are a factual breaking-news bulletin writer.
 
 You may ONLY use factual claims contained in FACTS below. Every factual
@@ -75,8 +79,11 @@ def generate_script(
         log_event(log, 40, "llm output unusable; falling back to template",
                   error=result.error, event_id=ctx.event_id)
     else:
-        log_event(log, 30, "llm unavailable; using template",
+        global _llm_down_warned
+        log_event(log, 20 if _llm_down_warned else 30,
+                  "llm unavailable; using template",
                   detail=detail, event_id=ctx.event_id)
+        _llm_down_warned = True
     return _script_from_template(ctx, plan, settings)
 
 

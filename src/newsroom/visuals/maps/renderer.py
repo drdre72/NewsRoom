@@ -26,6 +26,10 @@ class MapLibreRenderer:
     def __init__(self, jobs_per_browser: int = 25):
         self.jobs_per_browser = jobs_per_browser  # §22 bounded worker life
         self._jobs_done = 0
+        self._pw = None
+        self._browser = None
+        self._page = None
+        self._page_key: tuple | None = None
 
     def available(self) -> tuple[bool, str]:
         try:
@@ -39,49 +43,70 @@ class MapLibreRenderer:
             return False, "maps/web/map.html missing"
         return True, "playwright + maplibre ready"
 
+    # -- browser lifecycle ----------------------------------------------
+
+    def _ensure_page(self, plan: VisualPlan, context: dict):
+        """One Chromium serves every shot in the render; it relaunches after
+        jobs_per_browser shots (§22) or when the viewport changes."""
+        key = (plan.width, plan.height)
+        if (self._page is not None and self._page_key == key
+                and self._jobs_done < self.jobs_per_browser):
+            return self._page
+        self.close()
+        from playwright.sync_api import sync_playwright
+        self._pw = sync_playwright().start()
+        self._browser = self._pw.chromium.launch(args=["--hide-scrollbars"])
+        self._page = self._browser.new_page(
+            viewport={"width": plan.width, "height": plan.height})
+        self._page.goto((_WEB_DIR / "map.html").as_uri())
+        self._page.wait_for_function("window.__ready === true", timeout=15000)
+        self._page.evaluate("(p) => window.__initMap(p)",
+                            self._map_config(plan, context))
+        self._page_key = key
+        self._jobs_done = 0
+        return self._page
+
+    def close(self) -> None:
+        for obj, method in ((self._browser, "close"), (self._pw, "stop")):
+            if obj is not None:
+                try:
+                    getattr(obj, method)()
+                except Exception:  # noqa: BLE001 — teardown is best-effort
+                    pass
+        self._pw = self._browser = self._page = self._page_key = None
+
     # -- shots ---------------------------------------------------------
 
     def render_shot(self, shot: Shot, plan: VisualPlan, out_dir: Path,
                     context: dict) -> Path:
         """Render one shot. Animated camera shots produce a frame sequence
         (dir of PNGs); static shots produce a single PNG."""
-        from playwright.sync_api import sync_playwright
-
         frames = max(1, round(shot.duration_s * plan.fps))
         animate = shot.type in ("globe_to_location", "impact_radius") and frames > 1
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        with sync_playwright() as pw:
-            browser = pw.chromium.launch(args=["--hide-scrollbars"])
-            try:
-                page = browser.new_page(viewport={"width": plan.width,
-                                                  "height": plan.height})
-                page.goto((_WEB_DIR / "map.html").as_uri())
-                page.wait_for_function("window.__ready === true", timeout=15000)
-                page.evaluate("(p) => window.__initMap(p)", self._map_config(plan, context))
-                page.evaluate("(s) => window.__setShot(s)", json.dumps(shot.params))
+        page = self._ensure_page(plan, context)
+        page.evaluate("(s) => window.__setShot(s)", json.dumps(shot.params))
 
-                if not animate:
-                    page.wait_for_function("window.__idle === true", timeout=15000)
-                    out = out_dir / f"{shot.type}_{context.get('seq', 0):02d}.png"
-                    page.locator("#map").screenshot(path=str(out))
-                    self._frame(out, plan, context,
-                                label=shot.params.get("label"))
-                    self._jobs_done += 1
-                    return out
+        if not animate:
+            page.wait_for_function("window.__idle === true", timeout=15000)
+            out = out_dir / f"{shot.type}_{context.get('seq', 0):02d}.png"
+            page.locator("#map").screenshot(path=str(out))
+            self._frame(out, plan, context,
+                        label=shot.params.get("label"))
+            self._jobs_done += 1
+            return out
 
-                seq_dir = out_dir / f"seq_{shot.type}_{context.get('seq', 0):02d}"
-                seq_dir.mkdir(exist_ok=True)
-                for i in range(frames):
-                    t = i / max(1, frames - 1)
-                    page.evaluate("(t) => window.__evalCamera(t)", t)
-                    page.wait_for_function("window.__idle === true", timeout=15000)
-                    page.locator("#map").screenshot(
-                        path=str(seq_dir / f"f{i:05d}.png"))
-                self._jobs_done += 1
-                return seq_dir
-            finally:
-                browser.close()
+        seq_dir = out_dir / f"seq_{shot.type}_{context.get('seq', 0):02d}"
+        seq_dir.mkdir(exist_ok=True)
+        for i in range(frames):
+            t = i / max(1, frames - 1)
+            page.evaluate("(t) => window.__evalCamera(t)", t)
+            page.wait_for_function("window.__idle === true", timeout=15000)
+            page.locator("#map").screenshot(
+                path=str(seq_dir / f"f{i:05d}.png"))
+        self._jobs_done += 1
+        return seq_dir
 
     # -- map setup -------------------------------------------------------
 

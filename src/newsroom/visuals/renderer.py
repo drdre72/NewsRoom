@@ -330,10 +330,17 @@ def render_plan(renderer: ShotRenderer, plan: VisualPlan, out_dir: Path,
                 context: dict,
                 map_renderer: ShotRenderer | None = None) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
-    paths = []
-    for i, shot in enumerate(plan.shots):
-        ctx = dict(context, seq=i)
-        r = (map_renderer if map_renderer and shot.type in MAP_SHOT_TYPES
-             else renderer)
-        paths.append(r.render_shot(shot, plan, out_dir, ctx))
-    return paths
+    try:
+        paths = []
+        for i, shot in enumerate(plan.shots):
+            ctx = dict(context, seq=i)
+            r = (map_renderer if map_renderer and shot.type in MAP_SHOT_TYPES
+                 else renderer)
+            paths.append(r.render_shot(shot, plan, out_dir, ctx))
+        return paths
+    finally:
+        # A reusable map renderer keeps its browser between shots but not
+        # between renders — the page dies with the plan (§22 bounded life).
+        close = getattr(map_renderer, "close", None)
+        if close:
+            close()

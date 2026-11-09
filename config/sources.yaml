@@ -61,7 +61,7 @@ sources:
     authority: 0.7
     enabled: true
     feeds:
-      lastupdate: https://api.gdeltproject.org/gdeltv2/lastupdate.txt
+      lastupdate: https://data.gdeltproject.org/gdeltv2/lastupdate.txt
     poll_feed: lastupdate
     poll_every_seconds: 1800
     timeout_seconds: 90          # export zip is ~10MB

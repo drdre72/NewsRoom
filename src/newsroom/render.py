@@ -126,79 +126,74 @@ def render_short(
                       json.dumps(script.to_dict()), script.generator, True,
                       "validated")
 
-    # --- narration (per-segment => real durations, honest captions) -----
+    # --- narration + visuals: TTS is subprocess-bound and static shots
+    # render identically regardless of final durations, so the two stages
+    # overlap. Animated camera shots bake frame counts from duration_s —
+    # for those, narration finishes first (serial path, §37-safe order).
     engine = select_engine(settings)
-    narration = None
-    narration_degraded = False
-    caption_items: list[tuple[float, float, str]] = []
-    seg_wavs: list[Path] = []
-    if engine:
-        voice = (settings.get("tts.kokoro_voice")
-                 if engine.name == "kokoro_mlx" else
-                 settings.get("tts.say_voice"))
-        t = _TITLE_S
-        for i, seg in enumerate(script.segments):
-            wav = audio_dir / f"seg_{i:02d}.wav"
-            res = None
-            # Per-segment degrade: preferred engine, then `say` (§37).
-            for candidate in _tts_chain(engine, settings):
-                try:
-                    res = candidate.synthesize(
-                        seg.text, seg.speech_text, voice or
-                        settings.get("tts.say_voice", ""), wav)
-                    if candidate is not engine:
-                        log_event(log, 30, "tts degraded",
-                                  engine=engine.name, fallback=candidate.name,
+    voice = (settings.get("tts.kokoro_voice")
+             if engine and engine.name == "kokoro_mlx" else
+             settings.get("tts.say_voice"))
+
+    def _narrate() -> tuple:
+        narration = None
+        narration_degraded = False
+        caption_items: list[tuple[float, float, str]] = []
+        seg_wavs: list[Path] = []
+        if engine:
+            t = _TITLE_S
+            for i, seg in enumerate(script.segments):
+                wav = audio_dir / f"seg_{i:02d}.wav"
+                res = None
+                # Per-segment degrade: preferred engine, then `say` (§37).
+                for candidate in _tts_chain(engine, settings):
+                    try:
+                        res = candidate.synthesize(
+                            seg.text, seg.speech_text, voice or
+                            settings.get("tts.say_voice", ""), wav)
+                        if candidate is not engine:
+                            log_event(log, 30, "tts degraded",
+                                      engine=engine.name,
+                                      fallback=candidate.name, segment=i)
+                            narration_degraded = True
+                        break
+                    except Exception as exc:  # noqa: BLE001 — §37
+                        log_event(log, 40, "segment tts failed",
+                                  engine=candidate.name, error=str(exc),
                                   segment=i)
-                        narration_degraded = True
+                if res is None:
+                    if settings.get("tts.strict_voice"):
+                        # Voice lock: never ship mixed/silent narration —
+                        # fail the render so the job surfaces as failed (§37).
+                        raise RuntimeError(
+                            f"tts failed for segment {i} and strict_voice "
+                            "forbids fallback; render aborted")
                     break
-                except Exception as exc:  # noqa: BLE001 — TTS failure policy §37
-                    log_event(log, 40, "segment tts failed",
-                              engine=candidate.name, error=str(exc),
-                              segment=i)
-            if res is None:
-                if settings.get("tts.strict_voice"):
-                    # Voice lock: never ship mixed/silent narration — fail
-                    # the render so the job surfaces as failed (§37).
-                    raise RuntimeError(
-                        f"tts failed for segment {i} and strict_voice "
-                        "forbids fallback; render aborted")
-                break
-            seg_wavs.append(res.path)
-            seg.duration_s = res.duration_s
-            caption_items.append((t, t + res.duration_s, seg.text))
-            t += res.duration_s + _GAP_S
+                seg_wavs.append(res.path)
+                seg.duration_s = res.duration_s
+                caption_items.append((t, t + res.duration_s, seg.text))
+                t += res.duration_s + _GAP_S
+            else:
+                narration = _concat_audio(seg_wavs,
+                                          audio_dir / "narration.wav")
+            narration_dur = t - _TITLE_S - _GAP_S if seg_wavs else 0
         else:
-            narration = _concat_audio(seg_wavs, audio_dir / "narration.wav")
-        narration_dur = t - _TITLE_S - _GAP_S if seg_wavs else 0
-    else:
-        log_event(log, 40, "no tts backend; producing silent visual bulletin")
-        narration_dur = max(12.0, len(script.segments) * 4.0)
-        t = _TITLE_S
-        for seg in script.segments:
-            est = max(3.0, len(seg.text.split()) * 0.42)
-            seg.duration_s = est
-            caption_items.append((t, t + est, seg.text))
-            t += est + _GAP_S
+            log_event(log, 40,
+                      "no tts backend; producing silent visual bulletin")
+            narration_dur = max(12.0, len(script.segments) * 4.0)
+            t = _TITLE_S
+            for seg in script.segments:
+                est = max(3.0, len(seg.text.split()) * 0.42)
+                seg.duration_s = est
+                caption_items.append((t, t + est, seg.text))
+                t += est + _GAP_S
+        return narration, narration_degraded, caption_items, narration_dur
 
     # --- visuals --------------------------------------------------------
     vcfg = settings.get("video.shorts", {})
     w = int(vcfg.get("width", 1080)); h = int(vcfg.get("height", 1920))
     fps = int(vcfg.get("fps", 30))
     vplan = plan_visuals(conn, event, script, w, h, fps)
-
-    # Fit shots to narration: title fixed, tail fixed, middle scales.
-    middle = [s for s in vplan.shots if s.type not in ("title_card", "source_card")]
-    title = next((s for s in vplan.shots if s.type == "title_card"), None)
-    tail = next((s for s in vplan.shots if s.type == "source_card"), None)
-    if title:
-        title.duration_s = _TITLE_S
-    if tail:
-        tail.duration_s = _TAIL_S
-    target_mid = max(4.0, narration_dur)
-    cur_mid = sum(s.duration_s for s in middle) or 1.0
-    for s in middle:
-        s.duration_s = round(max(2.0, s.duration_s * target_mid / cur_mid), 2)
 
     card_renderer = CardRenderer()
     map_renderer = _select_map_renderer(settings)
@@ -208,8 +203,23 @@ def render_short(
         "source_line": f"SOURCE: {event.source_ids[0] if event.source_ids else 'unknown'}",
         "updated": f"UPDATED {event.last_updated[11:19]} UTC",
     }
-    shot_paths = render_plan(card_renderer, vplan, shots_dir, context,
-                             map_renderer=map_renderer)
+
+    animated = any(s.type in ("globe_to_location", "impact_radius")
+                   for s in vplan.shots)
+    if animated:
+        narration, narration_degraded, caption_items, narration_dur = _narrate()
+        _fit_shots(vplan, narration_dur)
+        shot_paths = render_plan(card_renderer, vplan, shots_dir, context,
+                                 map_renderer=map_renderer)
+    else:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            audio_fut = pool.submit(_narrate)
+            shot_paths = render_plan(card_renderer, vplan, shots_dir, context,
+                                     map_renderer=map_renderer)
+            narration, narration_degraded, caption_items, narration_dur = (
+                audio_fut.result())
+        _fit_shots(vplan, narration_dur)
 
     # --- captions + compose ----------------------------------------------
     ass = write_ass(caption_items, work / "captions.ass", w, h)
@@ -269,6 +279,24 @@ def render_short(
               renderer=manifest["renderer"],
               tts=engine.name if engine else None)
     return manifest
+
+
+def _fit_shots(vplan, narration_dur: float,
+               mid_floor: float = 4.0, mid_min: float = 2.0) -> None:
+    """Fit shots to narration: title fixed, tail fixed, middle scales."""
+    middle = [s for s in vplan.shots
+              if s.type not in ("title_card", "source_card")]
+    title = next((s for s in vplan.shots if s.type == "title_card"), None)
+    tail = next((s for s in vplan.shots if s.type == "source_card"), None)
+    if title:
+        title.duration_s = _TITLE_S
+    if tail:
+        tail.duration_s = _TAIL_S
+    target_mid = max(mid_floor, narration_dur)
+    cur_mid = sum(s.duration_s for s in middle) or 1.0
+    for s in middle:
+        s.duration_s = round(
+            max(mid_min, s.duration_s * target_mid / cur_mid), 2)
 
 
 def _tts_chain(engine, settings) -> list:
@@ -347,53 +375,46 @@ def render_longform(
     if not engine:
         raise RuntimeError(f"{fmt} requires a TTS engine; none available")
     narration = None
+    narration = None
     narration_degraded = False
-    caption_items: list[tuple[float, float, str]] = []
-    seg_wavs: list[Path] = []
     voice = (settings.get("tts.kokoro_voice")
              if engine.name == "kokoro_mlx" else
              settings.get("tts.say_voice"))
-    t = _TITLE_S
-    for i, seg in enumerate(script.segments):
-        wav = audio_dir / f"seg_{i:02d}.wav"
-        res = None
-        for candidate in _tts_chain(engine, settings):
-            try:
-                res = candidate.synthesize(
-                    seg.text, seg.speech_text,
-                    voice or settings.get("tts.say_voice", ""), wav)
-                if candidate is not engine:
-                    narration_degraded = True
-                break
-            except Exception as exc:  # noqa: BLE001
-                log_event(log, 40, f"{fmt} segment tts failed",
-                          engine=candidate.name, error=str(exc),
-                          segment=i)
-        if res is None:
-            if settings.get("tts.strict_voice"):
-                raise RuntimeError(
-                    f"tts failed for segment {i} and strict_voice "
-                    f"forbids fallback; {fmt} aborted")
-            break
-        seg_wavs.append(res.path)
-        seg.duration_s = res.duration_s
-        caption_items.append((t, t + res.duration_s, seg.text))
-        t += res.duration_s + _GAP_S
-    if seg_wavs:
-        narration = _concat_audio(seg_wavs, audio_dir / "narration.wav")
-    narration_dur = t - _TITLE_S - _GAP_S if seg_wavs else 0
 
-    # --- resolve chapter start times from caption timeline -----------
-    # The script generator records each chapter's first_segment index;
-    # we look up its caption start time directly.
-    for ch in chapters:
-        fi = ch.get("first_segment", 0)
-        if fi < len(caption_items):
-            ch["start_s"] = round(caption_items[fi][0], 2)
-        elif caption_items:
-            ch["start_s"] = round(caption_items[-1][1], 2)
-        else:
-            ch["start_s"] = _TITLE_S
+    def _narrate() -> tuple:
+        caption_items: list[tuple[float, float, str]] = []
+        seg_wavs: list[Path] = []
+        degraded = False
+        t = _TITLE_S
+        for i, seg in enumerate(script.segments):
+            wav = audio_dir / f"seg_{i:02d}.wav"
+            res = None
+            for candidate in _tts_chain(engine, settings):
+                try:
+                    res = candidate.synthesize(
+                        seg.text, seg.speech_text,
+                        voice or settings.get("tts.say_voice", ""), wav)
+                    if candidate is not engine:
+                        degraded = True
+                    break
+                except Exception as exc:  # noqa: BLE001
+                    log_event(log, 40, f"{fmt} segment tts failed",
+                              engine=candidate.name, error=str(exc),
+                              segment=i)
+            if res is None:
+                if settings.get("tts.strict_voice"):
+                    raise RuntimeError(
+                        f"tts failed for segment {i} and strict_voice "
+                        f"forbids fallback; {fmt} aborted")
+                break
+            seg_wavs.append(res.path)
+            seg.duration_s = res.duration_s
+            caption_items.append((t, t + res.duration_s, seg.text))
+            t += res.duration_s + _GAP_S
+        narration_path = (_concat_audio(seg_wavs, audio_dir / "narration.wav")
+                          if seg_wavs else None)
+        return (narration_path, degraded, caption_items,
+                t - _TITLE_S - _GAP_S if seg_wavs else 0)
 
     # --- visuals ------------------------------------------------------
     vcfg = settings.get(f"video.{fmt}", {}) or {}
@@ -406,19 +427,6 @@ def render_longform(
     fps = int(vcfg.get("fps", 30))
     vplan = plan_visuals(conn, event, script, w, h, fps)
 
-    # Fit shots to narration
-    middle = [s for s in vplan.shots if s.type not in ("title_card", "source_card")]
-    title = next((s for s in vplan.shots if s.type == "title_card"), None)
-    tail = next((s for s in vplan.shots if s.type == "source_card"), None)
-    if title:
-        title.duration_s = _TITLE_S
-    if tail:
-        tail.duration_s = _TAIL_S
-    target_mid = max(8.0, narration_dur)
-    cur_mid = sum(s.duration_s for s in middle) or 1.0
-    for s in middle:
-        s.duration_s = round(max(3.0, s.duration_s * target_mid / cur_mid), 2)
-
     card_renderer = CardRenderer()
     map_renderer = _select_map_renderer(settings)
     context = {
@@ -427,8 +435,37 @@ def render_longform(
         "source_line": f"SOURCE: {event.source_ids[0] if event.source_ids else 'unknown'}",
         "updated": f"UPDATED {event.last_updated[11:19]} UTC",
     }
-    shot_paths = render_plan(card_renderer, vplan, shots_dir, context,
-                             map_renderer=map_renderer)
+
+    # Same overlap as render_short: static shots don't need final
+    # durations; animated camera shots do (frame count = duration × fps).
+    animated = any(s.type in ("globe_to_location", "impact_radius")
+                   for s in vplan.shots)
+    if animated:
+        narration, narration_degraded, caption_items, narration_dur = _narrate()
+        _fit_shots(vplan, narration_dur, mid_floor=8.0, mid_min=3.0)
+        shot_paths = render_plan(card_renderer, vplan, shots_dir, context,
+                                 map_renderer=map_renderer)
+    else:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            audio_fut = pool.submit(_narrate)
+            shot_paths = render_plan(card_renderer, vplan, shots_dir, context,
+                                     map_renderer=map_renderer)
+            narration, narration_degraded, caption_items, narration_dur = (
+                audio_fut.result())
+        _fit_shots(vplan, narration_dur, mid_floor=8.0, mid_min=3.0)
+
+    # --- resolve chapter start times from caption timeline -----------
+    # The script generator records each chapter's first_segment index;
+    # we look up its caption start time directly.
+    for ch in chapters:
+        fi = ch.get("first_segment", 0)
+        if fi < len(caption_items):
+            ch["start_s"] = round(caption_items[fi][0], 2)
+        elif caption_items:
+            ch["start_s"] = round(caption_items[-1][1], 2)
+        else:
+            ch["start_s"] = _TITLE_S
 
     # --- captions + compose --------------------------------------------
     ass = write_ass(caption_items, work / "captions.ass", w, h)

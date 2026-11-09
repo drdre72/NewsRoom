@@ -6,8 +6,13 @@ development fallback so the pipeline is verifiable with zero extra installs.
 """
 from __future__ import annotations
 
+import atexit
+import json
+import os
+import select
 import shutil
 import subprocess
+import sys
 import wave
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -41,9 +46,107 @@ class TTSEngine:
 
 # ------------------------------------------------------------------- kokoro
 
+# ------------------------------------------------- resident kokoro worker
+
+_READ_TIMEOUT_S = 300
+
+
+class _KokoroWorker:
+    """One resident mlx_audio process per model — the model loads once at
+    spawn and serves every segment after. A dead worker respawns once;
+    the caller falls back to the per-call CLI beyond that (§37)."""
+
+    def __init__(self, model: str):
+        self.model = model
+        self._proc: subprocess.Popen | None = None
+
+    def _spawn(self) -> None:
+        src = Path(__file__).resolve().parents[2]
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(src) + (
+            os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+        self._proc = subprocess.Popen(
+            [sys.executable, "-m", "newsroom.audio.kokoro_worker",
+             "--model", self.model],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, env=env, text=True)
+        # First spawn includes the model load — expensive but bounded.
+        ready = self._read(timeout=180)
+        if not ready or not ready.get("ready"):
+            self._kill()
+            raise RuntimeError(
+                "kokoro worker failed to start: "
+                f"{(ready or {}).get('error') or 'no handshake'}")
+
+    def _read(self, timeout: float) -> dict | None:
+        if not self._proc or not self._proc.stdout:
+            return None
+        r, _, _ = select.select([self._proc.stdout], [], [], timeout)
+        if not r:
+            return None
+        line = self._proc.stdout.readline()
+        if not line:
+            return None
+        try:
+            return json.loads(line)
+        except json.JSONDecodeError:
+            return None
+
+    def synthesize(self, text: str, voice: str, prefix: Path) -> list[Path]:
+        for attempt in (0, 1):
+            try:
+                if self._proc is None or self._proc.poll() is not None:
+                    self._spawn()
+                assert self._proc and self._proc.stdin
+                self._proc.stdin.write(json.dumps(
+                    {"text": text, "voice": voice,
+                     "file_prefix": str(prefix)}) + "\n")
+                self._proc.stdin.flush()
+                resp = self._read(timeout=_READ_TIMEOUT_S)
+                if resp is None:
+                    # A timed-out request stays in flight; its late response
+                    # would desync the protocol. Kill the worker — the next
+                    # attempt (or the CLI fallback) respawns clean.
+                    self._kill()
+                    raise RuntimeError("kokoro worker unresponsive")
+                if resp.get("ok"):
+                    return [Path(f) for f in resp["files"]]
+                raise RuntimeError(
+                    f"kokoro worker error: {resp.get('error') or 'unknown'}")
+            except (BrokenPipeError, OSError, AssertionError) as exc:
+                self._kill()
+                if attempt:
+                    raise RuntimeError(f"kokoro worker failed: {exc}")
+        return []
+
+    def _kill(self) -> None:
+        if self._proc:
+            self._proc.kill()
+            self._proc = None
+
+
+_WORKERS: dict[str, _KokoroWorker] = {}
+
+
+def _worker_for(model: str) -> _KokoroWorker:
+    worker = _WORKERS.get(model)
+    if worker is None:
+        worker = _WORKERS[model] = _KokoroWorker(model)
+    return worker
+
+
+def _close_workers() -> None:
+    for worker in _WORKERS.values():
+        worker._kill()
+
+
+atexit.register(_close_workers)
+
+
 class KokoroMlxEngine(TTSEngine):
-    """Kokoro via mlx-audio (Apple Silicon). On-demand worker — loads the
-    model per invocation and releases after (§4)."""
+    """Kokoro via mlx-audio (Apple Silicon). A resident worker process keeps
+    the model loaded across segments and renders (§4 memory budget — one
+    worker, killed on failure)."""
     name = "kokoro_mlx"
 
     def available(self) -> tuple[bool, str]:
@@ -55,11 +158,32 @@ class KokoroMlxEngine(TTSEngine):
 
     def synthesize(self, display_text: str, speech_text: str, voice: str,
                    out_path: Path) -> AudioResult:
-        import sys
-        # sys.executable = the venv interpreter that has mlx_audio; a bare
-        # `python` would resolve to the system interpreter without it.
         model = self.settings.get(
             "tts.kokoro_model", "mlx-community/Kokoro-82M-v1.0-4bit")
+        try:
+            produced = _worker_for(model).synthesize(
+                speech_text, voice, out_path.with_suffix(""))
+        except RuntimeError:
+            produced = self._synthesize_subprocess(
+                model, speech_text, voice, out_path)
+        if not produced:
+            raise RuntimeError("kokoro synthesis failed: no audio produced")
+        out_wav = out_path.with_suffix(".wav")
+        if len(produced) == 1:
+            produced[0].replace(out_wav)
+        else:
+            _concat_wavs(produced, out_wav)   # long text splits into parts
+        return AudioResult(path=out_wav, duration_s=_wav_seconds(out_wav),
+                           sample_rate=_wav_rate(out_wav), engine=self.name,
+                           voice=voice)
+
+    @staticmethod
+    def _synthesize_subprocess(model: str, speech_text: str, voice: str,
+                               out_path: Path) -> list[Path]:
+        """Cold fallback: one-shot CLI, model loads per invocation. Used only
+        when the resident worker can't serve (§37 degraded, not dead)."""
+        # sys.executable = the venv interpreter that has mlx_audio; a bare
+        # `python` would resolve to the system interpreter without it.
         cmd = [
             sys.executable, "-m", "mlx_audio.tts.generate",
             "--model", model,
@@ -72,14 +196,7 @@ class KokoroMlxEngine(TTSEngine):
             f"{out_path.stem}_*.wav"))
         if proc.returncode != 0 or not produced:
             raise RuntimeError(f"kokoro synthesis failed: {proc.stderr[-400:]}")
-        out_wav = out_path.with_suffix(".wav")
-        if len(produced) == 1:
-            produced[0].replace(out_wav)
-        else:
-            _concat_wavs(produced, out_wav)   # long text splits into parts
-        return AudioResult(path=out_wav, duration_s=_wav_seconds(out_wav),
-                           sample_rate=_wav_rate(out_wav), engine=self.name,
-                           voice=voice)
+        return produced
 
 
 # ------------------------------------------------------------------------ say

@@ -66,6 +66,16 @@ renderer are the always-on fallbacks.
   a render fails rather than ship an unapproved voice.
 - `python main.py` re-execs into `.venv` automatically when present —
   deps (mlx_audio, PIL) always resolve from the project env.
+- Source fetches are concurrent (`poll_once` phase 2); ingest stays
+  serial on the main thread in config order — one SQLite writer. Failed
+  sources back off 5m→30m; `_consecutive_failures` resets on success.
+- Kokoro TTS runs in a resident worker process
+  (`audio/kokoro_worker.py`, JSON-lines on stdio, model loaded once per
+  service lifetime). A dead worker respawns once; the per-call CLI is
+  the cold fallback. Kill via `atexit`, never `kill -9` mid-request —
+  the stdio protocol desyncs (a late response binds the next request).
+- MapLibre's browser is reused across shots within one render
+  (`jobs_per_browser` relaunch bound); `render_plan` closes it.
 
 ## Layout map
 
