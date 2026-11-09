@@ -13,6 +13,8 @@ python main.py status        # newsroom health JSON/table
 python main.py simulate <scenario>   # offline end-to-end demo; 'list' shows all
 python main.py run --once    # poll enabled sources once (live network)
 python main.py render <event_id>     # render a Short for an event
+python main.py render-tiktok <id>    # vertical explainer for the TikTok desk
+python main.py tiktok list|draft|posted   # manual post desk (@justsystemnews)
 python main.py events        # list canonical events
 python main.py story <id>    # revision + fact-ledger history for an event
 python main.py broadcast     # Broadcast Director: rundown → HLS live.m3u8
@@ -81,6 +83,8 @@ src/newsroom/
   editor/          captions (SRT/ASS), timeline, ffmpeg, composer
   quality/         publication gate checks
   sim/             fixtures + scenario runner
+  publish/         youtube (OAuth+resumable upload) + tiktok (manual
+                   post desk — API self-upload is audit-blocked by TikTok)
   broadcast/       director, program scheduler, frame (16:9 chrome),
                    HLS playout (+ gated RTMP out), slate, preview
   publish/         YouTube upload API (OAuth, resumable upload, playlists)

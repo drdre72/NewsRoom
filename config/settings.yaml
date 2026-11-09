@@ -52,6 +52,14 @@ publishing:
     max_per_day: 100   # quota bucket is 100 uploads/day (June 2026)
     privacy: public    # public | unlisted | private
     best_of_day_top_n: 10  # daily playlist size
+  tiktok:
+    # Manual post desk (@justsystemnews). TikTok's Content Posting API
+    # audit rejects self-upload tools, so the compliant path is render ->
+    # draft package -> operator posts at tiktok.com/upload. There is no
+    # automated upload switch to enable.
+    handle: "@justsystemnews"
+    drafts_enabled: true
+    max_drafts_per_day: 3    # FYP rewards consistency, not volume
 
 llm:
   provider: ollama
@@ -86,6 +94,11 @@ video:
     width: 1920
     height: 1080
     fps: 30
+  tiktok:
+    width: 1080
+    height: 1920
+    fps: 30
+    min_rewards_s: 61   # Creator Rewards only counts videos over 1 minute
   encoder_preference: [h264_videotoolbox, libx264]
   audio_codec: aac
   audio_bitrate: 160k

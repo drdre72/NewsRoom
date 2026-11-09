@@ -299,13 +299,17 @@ def render_longform(
     settings: Settings,
     event_id: str,
     dry_run: bool = False,
+    *,
+    fmt: str = "longform",
 ) -> dict:
-    """Long-form explainer render — 1920x1080, multi-chapter, ~5-8 min.
+    """Multi-chapter explainer render — 1920x1080 (longform) or
+    1080x1920 (tiktok).
 
     The same event gets a deeper treatment than the short: a multi-chapter
     script (lede → what we know → context → revisions → corroboration →
-    impact → background → what to watch → close), horizontal 16:9 video,
-    and YouTube chapter markers in the manifest. Same fact ledger, same
+    impact → background → what to watch → close). ``fmt="longform"`` is the
+    horizontal YouTube leg with chapter markers; ``fmt="tiktok"`` is the
+    vertical explainer for the TikTok post desk — same fact ledger, same
     deterministic validation, same Kokoro voice lock.
     """
     from .story.story_planner import plan_longform
@@ -316,7 +320,8 @@ def render_longform(
         raise ValueError(f"unknown event {event_id}")
     rev = event.current_revision
     safe_id = re.sub(r"[^A-Za-z0-9_.-]", "_", event_id)
-    work = cache_dir() / "renders" / f"{safe_id}_r{rev}_long"
+    work_tag = "long" if fmt == "longform" else fmt
+    work = cache_dir() / "renders" / f"{safe_id}_r{rev}_{work_tag}"
     shots_dir = work / "shots"
     audio_dir = work / "audio"
     shots_dir.mkdir(parents=True, exist_ok=True)
@@ -330,7 +335,7 @@ def render_longform(
     script, chapters = generate_longform_script(ctx, plan, settings, event)
     ok, errors = validate_script(script, ctx, settings)
     if not ok:
-        raise RuntimeError(f"longform script failed validation: {errors}")
+        raise RuntimeError(f"{fmt} script failed validation: {errors}")
     script.validated = True
     story_id = repo.new_id("story")
     repo.insert_story(conn, story_id, event_id, rev, json.dumps(plan.__dict__),
@@ -340,7 +345,7 @@ def render_longform(
     # --- narration (per-segment, same Kokoro pipeline) ----------------
     engine = select_engine(settings)
     if not engine:
-        raise RuntimeError("longform requires a TTS engine; none available")
+        raise RuntimeError(f"{fmt} requires a TTS engine; none available")
     narration = None
     narration_degraded = False
     caption_items: list[tuple[float, float, str]] = []
@@ -361,14 +366,14 @@ def render_longform(
                     narration_degraded = True
                 break
             except Exception as exc:  # noqa: BLE001
-                log_event(log, 40, "longform segment tts failed",
+                log_event(log, 40, f"{fmt} segment tts failed",
                           engine=candidate.name, error=str(exc),
                           segment=i)
         if res is None:
             if settings.get("tts.strict_voice"):
                 raise RuntimeError(
                     f"tts failed for segment {i} and strict_voice "
-                    "forbids fallback; longform aborted")
+                    f"forbids fallback; {fmt} aborted")
             break
         seg_wavs.append(res.path)
         seg.duration_s = res.duration_s
@@ -390,10 +395,14 @@ def render_longform(
         else:
             ch["start_s"] = _TITLE_S
 
-    # --- visuals (1920x1080 horizontal) -------------------------------
-    vcfg = settings.get("video.longform", {})
-    w = int(vcfg.get("width", 1920))
-    h = int(vcfg.get("height", 1080))
+    # --- visuals ------------------------------------------------------
+    vcfg = settings.get(f"video.{fmt}", {}) or {}
+    if fmt == "longform":
+        w = int(vcfg.get("width", 1920))
+        h = int(vcfg.get("height", 1080))
+    else:
+        w = int(vcfg.get("width", 1080))
+        h = int(vcfg.get("height", 1920))
     fps = int(vcfg.get("fps", 30))
     vplan = plan_visuals(conn, event, script, w, h, fps)
 
@@ -433,24 +442,21 @@ def render_longform(
             is_sequence=path.is_dir()))
     slug = event.location_label or event.event_id
     slug = "".join(c if c.isalnum() else "_" for c in slug)[:40].strip("_")
-    out = output_dir() / "longform" / f"{slug}_r{rev}_longform.mp4"
+    out = output_dir() / fmt / f"{slug}_r{rev}_{fmt}.mp4"
     out.parent.mkdir(parents=True, exist_ok=True)
     _compose_atomic(timeline, out, settings, ass_path=ass)
 
-    # --- manifest + gate (with YouTube chapter markers) ---------------
+    # --- manifest + gate ----------------------------------------------
     manifest = {
         "event_id": event_id, "event_revision": rev,
         "rendered_at": repo.utcnow(),
         "story_id": story_id,
         "sources": event.source_ids,
         "fact_ids": [f.fact_id for f in ctx.current],
-        "format": "longform",
+        "format": fmt,
         "chapters": [{"title": c["title"],
                       "start_s": c.get("start_s", 0.0)}
                      for c in chapters],
-        "youtube_chapters": "\n".join(
-            f"{int(c.get('start_s', 0))//60:02d}:{int(c.get('start_s', 0))%60:02d} "
-            f"{c['title']}" for c in chapters),
         "script": {"generator": script.generator, "validated": True,
                    "hash": _sha256(work / "captions.srt")},
         "audio": {"engine": engine.name,
@@ -463,7 +469,8 @@ def render_longform(
         "render": {"title_s": _TITLE_S, "tail_s": _TAIL_S, "gap_s": _GAP_S,
                    "mid_min_s": 3.0, "target_floor_s": 8.0},
         "video": {"path": str(out), "hash": _sha256(out), "width": w,
-                  "height": h, "fps": fps},
+                  "height": h, "fps": fps,
+                  "duration_s": round(timeline.video_duration(), 2)},
         "tts_model": engine.name,
         "voice": voice,
         "renderer": (f"{card_renderer.name}+{map_renderer.name}"
@@ -471,22 +478,44 @@ def render_longform(
         "platform": "macos-arm64",
         "dry_run": dry_run,
     }
-    mpath = output_dir() / "manifests" / f"{safe_id}_r{rev}_longform.json"
+    if fmt == "longform":
+        # YouTube-only marker syntax; TikTok drafts keep chapters as data.
+        manifest["youtube_chapters"] = "\n".join(
+            f"{int(c.get('start_s', 0))//60:02d}:"
+            f"{int(c.get('start_s', 0))%60:02d} {c['title']}"
+            for c in chapters)
+    mpath = output_dir() / "manifests" / f"{safe_id}_r{rev}_{fmt}.json"
     mpath.write_text(json.dumps(manifest, indent=2))
     for kind, p in (("video", out), ("manifest", mpath), ("caption", ass),
                     ("audio", narration)):
         if p:
             repo.insert_asset(conn, repo.new_id("asset"), kind, str(p),
                               _sha256(p), event_id, rev,
-                              {"format": "longform"})
+                              {"format": fmt})
     gate = gate_render(conn, settings, manifest)
     manifest["publication_gate"] = gate
     mpath.write_text(json.dumps(manifest, indent=2))
-    log_event(log, 20, "longform render complete", event_id=event_id,
+    log_event(log, 20, f"{fmt} render complete", event_id=event_id,
               revision=rev, video=str(out), gate=gate["verdict"],
               chapters=len(chapters),
               renderer=manifest["renderer"], tts=engine.name)
     return manifest
+
+
+def render_tiktok(
+    conn: sqlite3.Connection,
+    settings: Settings,
+    event_id: str,
+    dry_run: bool = False,
+) -> dict:
+    """Vertical explainer for the TikTok post desk (@justsystemnews).
+
+    Same multi-chapter explainer script as the YouTube long-form leg,
+    rendered 1080x1920. Posting is manual (tiktok.com/upload) — the
+    `tiktok draft` command packages this render for review and posting.
+    """
+    return render_longform(conn, settings, event_id, dry_run=dry_run,
+                           fmt="tiktok")
 
 
 def render_from_recipe(

@@ -125,6 +125,66 @@ def cmd_render_longform(args) -> int:
     return 0 if manifest["publication_gate"]["verdict"] == "pass" else 1
 
 
+def cmd_render_tiktok(args) -> int:
+    from .render import render_tiktok
+    conn, settings = _conn_and_settings(args)
+    manifest = render_tiktok(conn, settings, args.event_id,
+                             dry_run=args.dry_run)
+    print(json.dumps(manifest, indent=2))
+    return 0 if manifest["publication_gate"]["verdict"] == "pass" else 1
+
+
+def cmd_tiktok(args) -> int:
+    """TikTok post desk — manual draft packages for @justsystemnews.
+
+    No API upload exists (TikTok's audit rejects self-upload tools), so
+    `draft` builds the posting package and the operator publishes at
+    tiktok.com/upload; `posted` records the URL back into the ledger.
+    """
+    from .publish import tiktok as tt
+    conn, settings = _conn_and_settings(args)
+
+    if args.action == "list":
+        for c in tt.list_candidates(conn, settings, limit=args.limit):
+            print(f"{c['event_id']:<34} r{c['revision']:<3} "
+                  f"{c['impact']:<10} {c['tier']:<12} {c['tiktok']:<9} "
+                  f"{(c['title'] or '')[:52]}")
+        return 0
+
+    if args.action == "draft":
+        if not args.event_id:
+            print("usage: tiktok draft <event_id>")
+            return 1
+        cands = tt.draft_candidates(conn, settings,
+                                    event_id=args.event_id,
+                                    enforce_daily_cap=False)
+        if not cands:
+            print("No eligible tiktok render for that event — check that "
+                  f"`python main.py render-tiktok {args.event_id}` ran "
+                  "clean, the gate passed, and no draft/post exists yet.")
+            return 1
+        result = tt.build_draft_package(conn, settings, cands[0])
+        print(f"Draft package: {result['dir']}")
+        print(f"Rewards (>60s): {'yes' if result['rewards_eligible'] else 'no'}")
+        print(f"\n{result['caption']}")
+        return 0
+
+    if args.action == "posted":
+        if not args.event_id or not args.url:
+            print("usage: tiktok posted <event_id> <tiktok.com url>")
+            return 1
+        try:
+            result = tt.mark_posted(conn, args.event_id, args.url)
+        except ValueError as exc:
+            print(f"Not recorded: {exc}")
+            return 1
+        print(f"Recorded post on {result['assets']} asset(s): "
+              f"{result['url']}")
+        return 0
+
+    return 1
+
+
 def cmd_events(args) -> int:
     from .storage import repositories as repo
     conn, _ = _conn_and_settings(args)
@@ -361,6 +421,13 @@ def main(argv: list[str] | None = None) -> int:
     p_ren.add_argument("event_id")
     p_rlf = sub.add_parser("render-long")
     p_rlf.add_argument("event_id")
+    p_rtk = sub.add_parser("render-tiktok")
+    p_rtk.add_argument("event_id")
+    p_tk = sub.add_parser("tiktok")
+    p_tk.add_argument("action", choices=("list", "draft", "posted"))
+    p_tk.add_argument("event_id", nargs="?", default=None)
+    p_tk.add_argument("url", nargs="?", default=None)
+    p_tk.add_argument("--limit", type=int, default=20)
     p_ev = sub.add_parser("events")
     p_ev.add_argument("--type", default=None)
     p_ev.add_argument("--limit", type=int, default=20)
@@ -413,14 +480,15 @@ def main(argv: list[str] | None = None) -> int:
     return {
         "doctor": cmd_doctor, "status": cmd_status, "simulate": cmd_simulate,
         "run": cmd_run, "render": cmd_render,
-        "render-long": cmd_render_longform, "events": cmd_events,
+        "render-long": cmd_render_longform,
+        "render-tiktok": cmd_render_tiktok, "events": cmd_events,
         "story": cmd_story, "broadcast": cmd_broadcast,
         "rtmp-relay": cmd_rtmp_relay,
         "preview": cmd_preview, "health": cmd_health,
         "services": cmd_services, "retention": cmd_retention,
         "dehydrate": cmd_dehydrate, "restore": cmd_restore,
         "archive": cmd_archive,
-        "youtube": cmd_youtube,
+        "youtube": cmd_youtube, "tiktok": cmd_tiktok,
     }[args.command](args)
 
 
