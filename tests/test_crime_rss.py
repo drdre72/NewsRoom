@@ -44,7 +44,8 @@ def test_normalize_emits_crime_report():
 
 
 def test_original_source_credited_not_google_news():
-    """Google News RSS carries <source> — credit Reuters/AP, not Google."""
+    """Google News RSS carries <source> — credit Reuters/AP first, with
+    'via Google News' at the end, and keep the Google News link."""
     a = _adapter()
     payload = json.dumps({
         "title": "Krakow mass shooter dies as dispute builds",
@@ -55,7 +56,10 @@ def test_original_source_credited_not_google_news():
     obs = a.normalize(payload)
     assert obs.fields["outlet"] == "Reuters"
     assert obs.title.startswith("Reuters: ")
-    assert "Google News" not in obs.title
+    assert "(via Google News)" in obs.title
+    assert "Google News" not in obs.title.split(":")[0]  # not the lead
+    assert obs.fields["report_url"] == "https://news.google.com/rss/articles/CBMiabc"
+    assert obs.fields.get("via") == "Google News"
 
 
 def test_source_suffix_stripped_from_title():
@@ -70,6 +74,19 @@ def test_source_suffix_stripped_from_title():
     obs = a.normalize(payload)
     assert obs.fields["headline"] == "Krakow mass shooter dies"
     assert obs.fields["outlet"] == "Reuters"
+    assert "(via Google News)" in obs.title
+
+
+def test_direct_feed_no_via():
+    """Direct feeds (BBC, Al Jazeera) don't get 'via Google News'."""
+    a = _adapter()
+    payload = json.dumps({
+        "title": "BBC: Floods in Bangladesh",
+        "link": "https://bbc.co.uk/x", "published": "2026-11-09T06:38:00Z",
+        "summary": "", "guid": "g2", "source": ""})
+    obs = a.normalize(payload)
+    assert "via Google News" not in obs.title
+    assert obs.fields.get("via") == ""
 
 
 def _item(title: str, guid: str, published: str) -> str:

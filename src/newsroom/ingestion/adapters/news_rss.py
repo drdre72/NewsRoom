@@ -150,11 +150,15 @@ class NewsRssAdapter(SourceAdapter):
         link = item.get("link", "").strip()
         if not title:
             return None
-        # Credit the original reporting source, not the aggregator.
-        # Google News RSS carries a <source> element (Reuters, AP, etc.);
-        # the configured outlet is the fallback for direct feeds (BBC, etc.).
+        # Credit the original reporting source first, Google News as
+        # "via" at the end. Google News RSS carries a <source> element
+        # (Reuters, AP, etc.); the configured outlet is the fallback
+        # for direct feeds (BBC, Al Jazeera) that don't need "via".
         original_source = item.get("source", "").strip()
-        outlet = original_source or self.config.get("outlet", self.name)
+        configured_outlet = self.config.get("outlet", self.name)
+        outlet = original_source or configured_outlet
+        is_aggregated = bool(original_source) and "google" in configured_outlet.lower()
+        via = " (via Google News)" if is_aggregated else ""
         key = hashlib.sha1(
             (item.get("guid") or link or title).encode()).hexdigest()[:16]
         snorm = self._snorm(title)
@@ -166,6 +170,7 @@ class NewsRssAdapter(SourceAdapter):
             "summary": item.get("summary", ""),
             "category": outlet, "category_title": "Press Report",
             "severity_norm": snorm,
+            "via": "Google News" if is_aggregated else "",
         }
         return NormalizedObservation(
             source=self.name, source_event_id=f"{self.name}:{key}",
@@ -174,6 +179,6 @@ class NewsRssAdapter(SourceAdapter):
             source_updated_at=item.get("published"),
             latitude=None, longitude=None,
             location_label=self.config.get("region", ""),
-            title=f"{outlet}: {title}",
+            title=f"{outlet}: {title}{via}",
             severity=snorm, status="reported", reviewed=False,
             fields=fields, cross_references=[])
