@@ -29,15 +29,21 @@ body{background:#0b1220;color:#e8eef7;font:16px -apple-system,sans-serif;
 video{width:100%%;max-width:1280px;background:#000;margin-top:24px}
 #s{margin:16px;color:#93a3be;font:13px ui-monospace,monospace;white-space:pre}
 b{color:#38bdf8}
+a{color:#38bdf8;text-decoration:none}
+a:hover{text-decoration:underline}
 </style>
 <video src="live.m3u8" controls autoplay muted playsinline></video>
-<div id=s>connecting…</div>
+<div id=s>connecting\u2026</div>
 <script>
 async function tick(){try{const r=await fetch('state.json');const j=await r.json();
 const s=document.getElementById('s');const b=document.createElement('b');
 b.textContent=j.state||'UNKNOWN';
-s.replaceChildren(b,document.createTextNode(
-  ' — '+(j.on_air||'')+'\\nsince '+(j.since||'')));
+const txt=' \u2014 '+(j.on_air||'')+'\\nsince '+(j.since||'');
+if(j.source_url){const a=document.createElement('a');
+a.href=j.source_url;a.target='_blank';a.rel='noopener';
+a.textContent='source \u2197';
+s.replaceChildren(b,document.createTextNode(txt+'  '),a);}
+else{s.replaceChildren(b,document.createTextNode(txt));}
 }catch(e){document.getElementById('s').textContent='off air'}}
 setInterval(tick,2000);tick();
 </script>

@@ -167,8 +167,8 @@ sources:
       spot: https://api.coinbase.com/v2/prices
     poll_feed: spot
     pairs:                            # pair -> label/move_scale
-      BTC-USD: {label: "Bitcoin",  move_scale: 5.0}
-      ETH-USD: {label: "Ethereum", move_scale: 7.0}
+      BTC-USD: {label: "Bitcoin",  move_scale: 2.0}
+      ETH-USD: {label: "Ethereum", move_scale: 2.5}
 
   # Attributed press reports (§53) — outlets report, we attribute; these are
   # corroborating evidence, not measurements. severity_norm is keyword-based

@@ -39,22 +39,28 @@ Rendered MP4s + manifests are already on disk (`output/shorts`,
 `output/longform`, `output/manifests` — manifests carry titles,
 `youtube_chapters`, fact IDs, and gate verdicts).
 
-Build required (~1-2 sessions):
+Build required (~1 session):
 - Google Cloud project → enable YouTube Data API v3 → OAuth consent
   screen (external, testing) → client_secret.json (stays out of git).
 - One-time OAuth device/console flow → refresh token in `.env`
   (`NEWSROOM_YT_REFRESH_TOKEN`); access tokens minted per upload.
 - `src/newsroom/publish/youtube.py`: resumable upload, title/description
   from manifest, `#Shorts` tagging for verticals, chapters for long-form.
-- Upload policy in config: min impact level, per-day cap
-  (default quota is 10,000 units/day; one upload costs ~1,600 → ~6/day),
-  dry-run mode that emits the request without sending.
+- Upload policy in config: min impact level, per-day cap.
+  **As of June 2026, `videos.insert` has its own quota bucket: 100
+  uploads/day at 1 unit each** (the old ~1,600-unit cost that limited
+  us to ~6/day was retired). The 10,000-unit shared pool covers
+  thumbnails, playlist adds, and metadata updates for ~100 fully
+  processed uploads/day. No scarcity-driven curation needed — upload
+  every gate-passed Short; use a "Best of the Day" playlist to drive
+  engagement back to live.
 - Gate: only `publication_gate.verdict == "pass"` assets upload;
   `publishing.automatic` still required as the master switch.
 
-Caveats: quota-limited to ~6 uploads/day on a free project — pick the
-best stories, not everything. OAuth consent screen in "testing" mode
-requires re-auth weekly unless the app is verified.
+Caveats: OAuth consent screen in "testing" mode requires re-auth weekly
+unless the app is verified. A daily "most engaging" playlist needs a
+selection heuristic (highest impact + most airings) — a config-driven
+rank, not an LLM pick.
 
 ## Recommendation
 

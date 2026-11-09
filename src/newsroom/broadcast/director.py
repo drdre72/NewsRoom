@@ -87,8 +87,10 @@ class BroadcastDirector:
         state = {"FLASH": BroadcastState.FLASH,
                  "BREAKING": BroadcastState.BREAKING}.get(
             program.level, BroadcastState.STORY)
+        source_url = self._source_url(program.event_id)
         self._set_state(state, program.title,
-                        event_id=program.event_id, kind=program.kind)
+                        event_id=program.event_id, kind=program.kind,
+                        source_url=source_url)
         log_event(log, 20, "airing", kind=program.kind,
                   rundown=program.rundown_id, event_id=program.event_id,
                   revision=program.revision, impact=program.level)
@@ -204,15 +206,30 @@ class BroadcastDirector:
                          interrupted=self._stop)
 
     # -- state / infra -------------------------------------------------------
+    def _source_url(self, event_id: str | None) -> str:
+        """Look up the canonical source URL for the airing event — the
+        first current fact that carries one (report_url, source_url,
+        eonet_link). Empty string when none exists."""
+        if not event_id:
+            return ""
+        for f in repo.current_facts(self.conn, event_id):
+            if f.field in ("report_url", "source_url", "eonet_link"):
+                val = (f.value_display or "").strip()
+                if val:
+                    return val
+        return ""
+
     def _set_state(self, state: BroadcastState, detail: str,
                    event_id: str | None = None,
-                   kind: str | None = None) -> None:
+                   kind: str | None = None,
+                   source_url: str | None = None) -> None:
         self.state = state
         payload = {
             "state": state.value,
             "on_air": detail,
             "kind": kind,
             "event_id": event_id,
+            "source_url": source_url or "",
             "since": repo.utcnow(),
             "playlist": str(self.playout.playlist),
         }
