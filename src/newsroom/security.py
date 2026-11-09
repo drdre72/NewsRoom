@@ -13,7 +13,8 @@ _QUERY_SECRET = re.compile(
     r"(?i)([?&](?:api_key|key|token|email|password|registrationkey)=)[^&#\s]+")
 _SECRET_ENV = (
     "FRED_API_KEY", "EIA_API_KEY", "BLS_API_KEY", "ACLED_API_KEY",
-    "ACLED_EMAIL", "NEWSROOM_RTMP_URL",
+    "ACLED_EMAIL", "NEWSROOM_RTMP_URL", "NEWSROOM_YT_CLIENT_SECRET",
+    "NEWSROOM_YT_REFRESH_TOKEN",
 )
 
 

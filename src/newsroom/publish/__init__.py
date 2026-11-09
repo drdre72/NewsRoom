@@ -13,13 +13,13 @@ deterministic, and `publishing.automatic` is the master switch.
 from __future__ import annotations
 
 from .youtube import (
-    device_auth_url, exchange_device_code, refresh_access_token,
+    authorize_desktop, save_refresh_token, refresh_access_token,
     upload_video, create_playlist, add_to_playlist,
     select_best_of_day, upload_eligible,
 )
 
 __all__ = [
-    "device_auth_url", "exchange_device_code", "refresh_access_token",
+    "authorize_desktop", "save_refresh_token", "refresh_access_token",
     "upload_video", "create_playlist", "add_to_playlist",
     "select_best_of_day", "upload_eligible",
 ]

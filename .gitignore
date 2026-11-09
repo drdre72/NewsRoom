@@ -19,3 +19,4 @@ output/
 models/
 node_modules/
 .DS_Store
+docs/client_secret_*.json

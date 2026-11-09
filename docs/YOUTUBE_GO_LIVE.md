@@ -33,14 +33,14 @@ Caveats: you can't title/tag individual segments, no chapters mid-stream,
 YouTube may throttle/re-encode; VOD archives accumulate automatically
 (up to the archive limit) but aren't curated.
 
-## Path B — Upload API for Shorts + long-form (built, gated)
+## Path B — Upload API for Shorts + long-form (preview only)
 
 Rendered MP4s + manifests are already on disk (`output/shorts`,
 `output/longform`, `output/manifests` — manifests carry titles,
 `youtube_chapters`, fact IDs, and gate verdicts). The publish module
-is built (`src/newsroom/publish/youtube.py`): OAuth device flow,
-resumable upload, title/description/chapters from manifest, and a
-"Best of the Day" playlist — all via raw HTTP, no Google client library.
+contains desktop loopback OAuth and resumable upload. Uploads are
+separately disabled pending an operator-approved publication review;
+the "Best of the Day" command currently previews selection only.
 
 ### Setup (one-time)
 
@@ -50,24 +50,48 @@ resumable upload, title/description/chapters from manifest, and a
    NEWSROOM_YT_CLIENT_ID=xxx.apps.googleusercontent.com
    NEWSROOM_YT_CLIENT_SECRET=xxx
    ```
-2. Run `python main.py youtube auth` → visit the URL, enter the code,
-   copy the refresh token to `.env`:
-   ```
-   NEWSROOM_YT_REFRESH_TOKEN=xxx
-   ```
+2. Run `python main.py youtube auth` on the Mac, open the short
+   `http://127.0.0.1:<port>/start` URL it prints in a browser on that
+   same Mac, and approve the requested YouTube scopes. Leave the command
+   running until the browser redirects back to localhost.
+   The localhost callback stores the refresh token privately in `.env`;
+   it is never printed. Desktop clients cannot use Google's device-code
+   flow.
 
 ### Usage
 
 ```bash
-python main.py youtube upload --dry-run    # see what would upload
-python main.py youtube upload              # upload all gate-passed
-python main.py youtube playlist --dry-run  # see best-of-day selection
-python main.py youtube playlist            # create the playlist
+python main.py youtube upload --max-per-day 3  # read-only preview
+python main.py youtube upload --asset asset_87e9c5628cdb  # reviewed BBC metadata
+python main.py youtube playlist                # read-only selection
 ```
 
-### What uploads
+`youtube upload --execute` requires both `publishing.automatic` and
+`publishing.youtube.uploads_enabled` (default **false**). Do not enable
+uploads until the channel, metadata, and a test upload are reviewed.
+Live uploads require `--asset <asset_id>` and matching reviewed metadata
+in `docs/YOUTUBE_CANDIDATE_DRAFT.json`; the first test is private-only.
+The draft is bound to the current revision, video SHA-256 and linked
+source fact. Its description is used verbatim instead of the generic
+placeholder channel URL. Do not use `--execute` until the operator
+explicitly authorizes the specific upload.
+Playlist publishing is blocked until it can use verified uploaded video IDs.
+The first reviewed BBC Short was uploaded as a **private** test
+(`JmapP03nQa4`); YouTube confirmed it processed and remains private.
+The upload switch is off again. This does not authorize public publishing.
+The upload client saves resumable sessions in the private
+`output/youtube_sessions/` directory (0700, journal files 0600). If a
+connection drops, rerunning the command queries YouTube for the committed
+byte range or completed video ID instead of starting another upload.
+An expired or unqueryable session **fails closed**: check the channel
+manually before attempting a new session. Do not remove the journal.
 
-Only assets where `publication_gate.verdict == "pass"` in the manifest.
+### Upload selection
+
+Only current-revision, non-fixture, non-weather assets where
+`publication_gate.verdict == "pass"` in the manifest and the video hash
+matches the file. The CLI cap and remaining daily quota both apply;
+an event already uploaded is skipped.
 Shorts (vertical 1080x1920) get `#Shorts` in the description;
 long-form gets YouTube chapters from the manifest. Titles strip the
 outlet prefix; descriptions carry source attribution + event ID +
@@ -82,12 +106,11 @@ needed — upload everything that passes the gate.
 ### Best of the Day playlist
 
 `select_best_of_day` ranks stories by `impact_score × (1 + air_count/10)`
-over the last 24h, excluding replays. A FLASH that aired once beats a
-NORMAL that aired 50 times. The playlist drives engagement back to
-the live broadcast.
+over the last 24h, excluding replays. This is a preview only until
+upload records can link selected stories to verified YouTube video IDs.
 
 ## Recommendation
 
 Start with Path A (zero build, real live presence) and add Path B for
 Shorts/long-form once the live channel has run cleanly for a week.
-Both stay OFF until you say go.
+The live RTMP path is already on; upload publishing remains off.

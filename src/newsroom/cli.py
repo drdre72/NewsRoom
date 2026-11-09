@@ -163,49 +163,78 @@ def cmd_rtmp_relay(args) -> int:
 def cmd_youtube(args) -> int:
     """YouTube upload API: auth, upload Shorts/long-form, best-of-day playlist."""
     from .publish.youtube import (
-        device_auth_url, exchange_device_code, refresh_access_token,
-        upload_video, create_playlist, add_to_playlist,
-        select_best_of_day, upload_eligible,
+        authorize_desktop, save_refresh_token, refresh_access_token,
+        upload_video, reviewed_metadata, select_best_of_day, upload_eligible,
     )
     from .storage import repositories as repo
     conn, settings = _conn_and_settings(args)
 
     if args.action == "auth":
-        info = device_auth_url()
-        print(f"Visit: {info['user_url']}")
-        print(f"Enter code: {info['user_code']}")
-        print("Waiting for authorization...")
-        token = exchange_device_code(
-            info["device_code"],
-            interval=int(info.get("interval", "5")),
-            timeout=int(info.get("expires_in", "300")))
-        if token:
-            print(f"Authorized! Add to .env:")
-            print(f"  NEWSROOM_YT_REFRESH_TOKEN={token}")
-            return 0
-        print("Authorization timed out or failed.")
-        return 1
+        from pathlib import Path
+        env_file = Path(__file__).resolve().parents[2] / ".env"
+        try:
+            token = authorize_desktop()
+            save_refresh_token(token, env_file)
+        except (RuntimeError, TimeoutError, OSError) as exc:
+            print(f"Authorization failed: {exc}")
+            return 1
+        print("Authorized; refresh token saved privately to .env.")
+        return 0
 
     if args.action == "upload":
+        if args.execute and (not args.asset or args.dry_run):
+            print("Use --execute --asset <asset_id> for one reviewed upload; "
+                  "do not combine --execute and --dry-run.")
+            return 1
         eligible = upload_eligible(conn, settings,
-                                   max_per_day=args.max_per_day)
+                                   max_per_day=args.max_per_day,
+                                   asset_id=args.asset)
         if not eligible:
             print("No eligible videos to upload.")
-            return 0
+            return 1 if args.asset else 0
+        if args.execute and len(eligible) != 1:
+            print("Expected exactly one reviewed asset; no upload attempted.")
+            return 1
+        reviewed = None
+        if args.asset:
+            from pathlib import Path
+            draft_path = (Path(__file__).resolve().parents[2] /
+                          "docs/YOUTUBE_CANDIDATE_DRAFT.json")
+            try:
+                reviewed = reviewed_metadata(conn, eligible[0], draft_path)
+            except (ValueError, KeyError, OSError) as exc:
+                print(f"Draft validation failed: {exc}")
+                return 1
         print(f"Found {len(eligible)} eligible videos.")
-        if args.dry_run:
+        if not args.execute:
+            if reviewed:
+                print(f"  Privacy: {reviewed['privacy']}")
+                print(f"  Title: {reviewed['title']}")
+                print(f"  Tags: {', '.join(reviewed['tags'])}")
+                print(f"  Description:\n{reviewed['description']}")
+                print(f"  Video: {eligible[0]['path']}")
+                return 0
             for e in eligible:
                 ev = repo.get_event(conn, e["event_id"])
                 print(f"  [dry-run] {e['event_id']} r{e['revision']} "
                       f"-> '{ev.title[:60] if ev else ''}'")
             return 0
+        if not (settings.get("publishing.automatic", False) and
+                settings.get("publishing.youtube.uploads_enabled", False)):
+            print("YouTube uploads are disabled; review the preview and "
+                  "enable publishing.youtube.uploads_enabled explicitly.")
+            return 1
         token = refresh_access_token()
         uploaded = 0
         for e in eligible:
             ev = repo.get_event(conn, e["event_id"])
             result = upload_video(e["manifest"], ev, token,
-                                 dry_run=False, privacy=args.privacy)
-            if result.get("ok"):
+                                 asset_id=e["asset_id"], reviewed=reviewed)
+            if result.get("ok") and result.get("video_id"):
+                repo.patch_asset_meta(conn, e["asset_id"], {
+                    "youtube_id": result["video_id"],
+                    "youtube_uploaded_at": repo.utcnow(),
+                })
                 uploaded += 1
                 print(f"  uploaded: {result.get('video_id', '?')} "
                       f"'{result.get('title', '')[:60]}'")
@@ -223,20 +252,11 @@ def cmd_youtube(args) -> int:
         for i, s in enumerate(best, 1):
             print(f"  {i}. [{s['impact_level']}] {s['title'][:60]} "
                   f"(aired {s['air_count']}x, score {s['impact_score']:.2f})")
-        if args.dry_run:
+        if not args.execute:
             return 0
-        token = refresh_access_token()
-        from datetime import datetime, timezone
-        title = f"Best of the Day — {datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
-        desc = "Top stories from the autonomous newsroom's live broadcast."
-        pl = create_playlist(title, desc, token, dry_run=args.dry_run)
-        if not pl.get("ok"):
-            print(f"Playlist creation failed: {pl.get('error','')}")
-            return 1
-        if pl.get("dry_run"):
-            return 0
-        print(f"Playlist: {pl.get('playlist_id','?')}")
-        return 0
+        print("Playlist publishing is not implemented yet: selection has no "
+              "verified uploaded video IDs. No playlist was created.")
+        return 1
 
     return 1
 
@@ -379,10 +399,12 @@ def main(argv: list[str] | None = None) -> int:
     p_yt.add_argument("action", choices=("auth", "upload", "playlist"))
     p_yt.add_argument("--dry-run", action="store_true",
                       help="show what would upload without sending")
+    p_yt.add_argument("--execute", action="store_true",
+                      help="upload one reviewed private video (requires --asset and uploads_enabled)")
+    p_yt.add_argument("--asset", default=None,
+                      help="restrict upload preview/execution to one reviewed asset ID")
     p_yt.add_argument("--max-per-day", type=int, default=100,
                       help="daily upload cap (quota is 100)")
-    p_yt.add_argument("--privacy", default="public",
-                      choices=("public", "unlisted", "private"))
     p_yt.add_argument("--top-n", type=int, default=10,
                       help="playlist size for 'playlist' action")
 
