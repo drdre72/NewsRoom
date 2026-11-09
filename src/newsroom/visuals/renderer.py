@@ -267,8 +267,22 @@ class CardRenderer:
             while size > 24 and self._tw(draw, value, f_val) > cell_w - 56:
                 size -= 4
                 f_val = _font(_MONO_CANDIDATES, size)
-            draw.text((x + 28, y + cell_h // 2), value, font=f_val,
-                      fill=PALETTE["text"])
+            if self._tw(draw, value, f_val) <= cell_w - 56:
+                draw.text((x + 28, y + cell_h // 2), value, font=f_val,
+                          fill=PALETTE["text"])
+            else:
+                # Long values (declaration titles, alert names) wrap
+                # inside the cell instead of bleeding off its edge.
+                lines = self._wrap(draw, value, f_val, cell_w - 56)
+                if len(lines) > 3:
+                    lines = lines[:3]
+                    lines[-1] = lines[-1] + "…"
+                line_h = size + 8
+                vy = y + cell_h // 2 - (len(lines) - 1) * (line_h // 2)
+                for ln in lines:
+                    draw.text((x + 28, vy), ln, font=f_val,
+                              fill=PALETTE["text"])
+                    vy += line_h
 
     def _shot_revision_card(self, img, draw, shot, plan, context):
         f_title = _font(_FONT_CANDIDATES, 56)
