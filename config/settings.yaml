@@ -3,6 +3,16 @@
 project:
   name: newsroom
 
+editorial:
+  to: "jarvintels@gmail.com"
+  sender: "jarvintels@gmail.com"
+  max_age_hours: 48
+  review_window_hours: 24
+  batch_size: 10
+  max_attempts: 5
+  distribution_enabled: false
+  real_mail_enabled: false
+
 paths:
   db: newsroom.db
   logs: logs

@@ -13,7 +13,7 @@ from pathlib import Path
 from ..paths import db_path
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 4
 
 
 def connect(path: Path | None = None) -> sqlite3.Connection:
@@ -61,14 +61,19 @@ def migrate(conn: sqlite3.Connection) -> int:
         if version in applied:
             continue
         # executescript() runs in autocommit (it commits pending txns itself),
-        # so it stays outside tx(); only the version marker needs a tx.
-        conn.executescript(sql_file.read_text(encoding="utf-8"))
-        with tx(conn):
-            conn.execute(
+        # so it stays outside tx(); the migration and version marker share a transaction.
+        script = sql_file.read_text(encoding="utf-8")
+        try:
+            conn.executescript(
+                "BEGIN;\n" + script + "\n"
                 "INSERT INTO schema_migrations(version, applied_at) "
-                "VALUES (?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
-                (version,),
+                f"VALUES ({version}, strftime('%Y-%m-%dT%H:%M:%fZ','now'));\nCOMMIT;"
             )
+        except Exception:
+            if conn.in_transaction:
+                conn.execute("ROLLBACK")
+            raise
+        applied.add(version)
     return max(applied | {SCHEMA_VERSION})
 
 

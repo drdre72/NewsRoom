@@ -11,7 +11,9 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
+import os
 import sys
 import time
 
@@ -483,6 +485,108 @@ def cmd_health(args) -> int:
     return cmd_preview(args)
 
 
+def cmd_newsletter(args) -> int:
+    from .briefings import compose, reconcile, revise
+    from .editorial import inspect, approve, request_changes, reject
+    from .delivery import FakeMailer, drain_review, mock_dispatch
+    from .gmail_editorial import (
+        authorize_desktop, import_client_credentials, real_send_review,
+        save_refresh_token,
+    )
+
+    conn, settings = _conn_and_settings(args)
+    action = args.action
+    try:
+        if action == "gmail-import-client":
+            if os.getuid() != os.geteuid() or not sys.stdin.isatty():
+                raise ValueError("local interactive OS session required")
+            if not args.client_json:
+                raise ValueError("--client-json path required")
+            from pathlib import Path
+            env_file = Path(__file__).resolve().parents[2] / ".env"
+            import_client_credentials(Path(args.client_json).expanduser(), env_file)
+            result = {"gmail_client_configured": True, "messages_sent": 0}
+        elif action == "gmail-auth":
+            if not args.authorize or os.getuid() != os.geteuid() or not sys.stdin.isatty():
+                raise ValueError("explicit --authorize from a local interactive OS session required")
+            from pathlib import Path
+            env_file = Path(__file__).resolve().parents[2] / ".env"
+            token = authorize_desktop()
+            save_refresh_token(token, env_file)
+            result = {"authorized": True, "scope": "gmail.send", "messages_sent": 0}
+        elif action == "gmail-send-test":
+            snapshot = inspect(conn, args.draft_id)
+            revision = snapshot["revision"]
+            if args.revision != revision["revision_id"] or args.hash != revision["content_sha256"]:
+                raise ValueError("exact draft revision and hash required")
+            if not args.execute:
+                result = {"dry_run": True, "recipient": settings.get("editorial.to"),
+                          "draft_id": args.draft_id, "revision": args.revision,
+                          "content_sha256": args.hash, "messages_sent": 0}
+            else:
+                if os.getuid() != os.geteuid() or not sys.stdin.isatty():
+                    raise ValueError("real mail requires a local interactive OS session")
+                result = {"messages_sent": real_send_review(
+                    conn, settings, args.draft_id, args.revision, args.hash,
+                    args.confirm_recipient,
+                )}
+                if result["messages_sent"] != 1:
+                    result["status"] = "not_confirmed; inspect outbox before retry"
+        elif action == "drafts":
+            reconcile(conn)
+            rows = conn.execute(
+                "SELECT draft_id, tier, status, current_revision FROM briefing_drafts "
+                "ORDER BY created_at DESC LIMIT 30"
+            ).fetchall()
+            result = [dict(row) for row in rows]
+        elif action == "inspect":
+            result = inspect(conn, args.draft_id)
+        elif action == "compose":
+            profile = {"state": args.state, "topics": args.topic} if args.tier == "PRO" else None
+            result = {"draft_id": compose(conn, settings, args.tier, profile)}
+        elif action == "send-test":
+            if not args.dry_run:
+                raise ValueError("only --dry-run fake sending is supported")
+            count = conn.execute(
+                "SELECT COUNT(*) FROM editorial_outbox WHERE status='pending'"
+            ).fetchone()[0]
+            result = {"pending_review_jobs": count, "network_messages_sent": 0}
+        elif action == "drain-fake":
+            mailer = FakeMailer()
+            result = {"fake_sent": drain_review(
+                conn, mailer, settings.get("editorial.batch_size", 10),
+                settings.get("editorial.max_attempts", 5)
+            ), "network_messages_sent": 0}
+        elif action == "dispatch":
+            result = {"status": mock_dispatch(conn, settings, args.draft_id, args.revision)}
+        else:
+            if os.getuid() != os.geteuid() or not sys.stdin.isatty():
+                raise ValueError("local interactive OS session required")
+            actor = getpass.getuser()
+            if action == "approve":
+                approve(conn, args.draft_id, args.revision, args.hash, ["mock"], actor)
+                result = {"status": "APPROVED", "destination": "mock"}
+            elif action == "request-changes":
+                request_changes(conn, args.draft_id, args.note, actor)
+                result = {"status": "CHANGES_REQUESTED"}
+            elif action == "reject":
+                reject(conn, args.draft_id, args.note, actor)
+                result = {"status": "REJECTED"}
+            else:
+                result = {"revision": revise(conn, settings, args.draft_id, args.note)}
+    except ValueError as exc:
+        print(f"newsletter: {exc}", file=sys.stderr)
+        return 1
+    except (RuntimeError, OSError, TimeoutError):
+        print("newsletter: Gmail operation failed; credentials and network details withheld",
+              file=sys.stderr)
+        return 1
+    finally:
+        conn.close()
+    print(json.dumps(result, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="newsroom")
     parser.add_argument("--json", action="store_true", help="JSON output")
@@ -508,6 +612,24 @@ def main(argv: list[str] | None = None) -> int:
     p_tk.add_argument("event_id", nargs="?", default=None)
     p_tk.add_argument("url", nargs="?", default=None)
     p_tk.add_argument("--limit", type=int, default=20)
+    p_nl = sub.add_parser("newsletter")
+    p_nl.add_argument("action", choices=("drafts", "inspect", "compose", "send-test",
+                                         "drain-fake",
+                                         "request-changes", "revise", "reject",
+                                         "approve", "dispatch", "gmail-auth",
+                                         "gmail-send-test", "gmail-import-client"))
+    p_nl.add_argument("draft_id", nargs="?")
+    p_nl.add_argument("--tier", choices=("FREE", "PRO"), default="FREE")
+    p_nl.add_argument("--state")
+    p_nl.add_argument("--topic", action="append", default=[])
+    p_nl.add_argument("--revision", type=int)
+    p_nl.add_argument("--hash")
+    p_nl.add_argument("--note", default="")
+    p_nl.add_argument("--dry-run", action="store_true")
+    p_nl.add_argument("--execute", action="store_true")
+    p_nl.add_argument("--authorize", action="store_true")
+    p_nl.add_argument("--confirm-recipient")
+    p_nl.add_argument("--client-json")
     p_ev = sub.add_parser("events")
     p_ev.add_argument("--type", default=None)
     p_ev.add_argument("--limit", type=int, default=20)
@@ -569,6 +691,7 @@ def main(argv: list[str] | None = None) -> int:
         "dehydrate": cmd_dehydrate, "restore": cmd_restore,
         "archive": cmd_archive,
         "youtube": cmd_youtube, "tiktok": cmd_tiktok,
+        "newsletter": cmd_newsletter,
     }[args.command](args)
 
 

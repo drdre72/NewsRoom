@@ -1,5 +1,6 @@
 # env / secrets — never commit (§77)
 .env
+client_secret_*.json
 *.pem
 *.key
 
